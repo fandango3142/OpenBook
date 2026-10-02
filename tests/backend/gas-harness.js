@@ -187,9 +187,11 @@ function loadBackend(opts, files) {
   var uuidCounter = 0;
   sandbox.Utilities = {
     DigestAlgorithm: { SHA_256: 'SHA_256' },
+    Charset: { UTF_8: 'UTF_8' },
     getUuid: function () { uuidCounter++; return 'token-' + uuidCounter; },
-    computeDigest: function (algorithm, value) {
+    computeDigest: function (algorithm, value, charset) {
       if (algorithm !== 'SHA_256') throw new Error('Unsupported digest algorithm');
+      if (charset !== undefined && charset !== 'UTF_8') throw new Error('Unsupported charset');
       return Array.from(crypto.createHash('sha256').update(String(value), 'utf8').digest(),
         function (byte) { return byte > 127 ? byte - 256 : byte; });
     },

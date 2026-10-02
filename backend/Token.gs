@@ -8,11 +8,27 @@ var TokenService = (function () {
     return Utilities.getUuid();
   }
 
-  function hashToken(token) {
-    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token);
+  function hash(token) {
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token, Utilities.Charset.UTF_8);
     return digest.map(function (byte) {
       return ('0' + ((byte + 256) % 256).toString(16)).slice(-2);
     }).join('');
+  }
+
+  function issue() {
+    var token = generateToken();
+    return { token: token, hash: hash(token) };
+  }
+
+  function matches(token, storedHash) {
+    if (typeof token !== 'string' || !token) return false;
+    var candidate = hash(token);
+    var expected = typeof storedHash === 'string' ? storedHash : '';
+    var difference = candidate.length ^ expected.length;
+    for (var i = 0; i < candidate.length; i++) {
+      difference |= candidate.charCodeAt(i) ^ expected.charCodeAt(i);
+    }
+    return difference === 0;
   }
 
   function getExpiryDate() {
@@ -38,8 +54,11 @@ var TokenService = (function () {
   }
 
   return {
+    issue: issue,
+    hash: hash,
+    matches: matches,
     generateToken: generateToken,
-    hashToken: hashToken,
+    hashToken: hash,
     getExpiryDate: getExpiryDate,
     validateToken: validateToken,
   };
