@@ -8,6 +8,13 @@ var TokenService = (function () {
     return Utilities.getUuid();
   }
 
+  function hashToken(token) {
+    var digest = Utilities.computeDigest(Utilities.DigestAlgorithm.SHA_256, token);
+    return digest.map(function (byte) {
+      return ('0' + ((byte + 256) % 256).toString(16)).slice(-2);
+    }).join('');
+  }
+
   function getExpiryDate() {
     var expiryDays = Config.getNumber('TOKEN_EXPIRY_DAYS') || 90;
     var expiry = new Date();
@@ -32,6 +39,7 @@ var TokenService = (function () {
 
   return {
     generateToken: generateToken,
+    hashToken: hashToken,
     getExpiryDate: getExpiryDate,
     validateToken: validateToken,
   };

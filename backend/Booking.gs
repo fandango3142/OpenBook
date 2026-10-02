@@ -25,11 +25,93 @@ var BookingStore = (function () {
     return sheet;
   }
 
+  function isVersioned(headers) {
+    return headers.indexOf('booking_id') !== -1 && headers.indexOf('manage_token_hash') !== -1;
+  }
+
+  function value(row, headers, field) {
+    var column = headers.indexOf(field);
+    return column < 0 ? '' : (row[column] || '');
+  }
+
+  function isHashedRow(row, headers) {
+    return isVersioned(headers) && !!value(row, headers, 'manage_token_hash');
+  }
+
+  function decode(row, headers, token) {
+    if (!isHashedRow(row, headers)) {
+      var legacy = {};
+      headers.forEach(function (header, index) { legacy[header] = row[index]; });
+      return legacy;
+    }
+    var status = String(value(row, headers, 'status')).toLowerCase();
+    var createdAt = value(row, headers, 'created_at');
+    var expiresAt = '';
+    if (createdAt) {
+      var created = new Date(createdAt);
+      if (!isNaN(created.getTime())) {
+        created.setDate(created.getDate() + (Config.getNumber('TOKEN_EXPIRY_DAYS') || 90));
+        expiresAt = created.toISOString();
+      }
+    }
+    return {
+      token: token || '',
+      tokenExpiresAt: expiresAt,
+      eventId: value(row, headers, 'calendar_event_id'),
+      status: status,
+      meetingTypeId: value(row, headers, 'service_id'),
+      meetingTypeName: value(row, headers, 'service_name_snapshot'),
+      eventLabel: '',
+      startTime: value(row, headers, 'start_at'),
+      endTime: value(row, headers, 'end_at'),
+      firstName: value(row, headers, 'customer_name_snapshot').split(' ')[0],
+      lastName: value(row, headers, 'customer_name_snapshot').split(' ').slice(1).join(' '),
+      email: value(row, headers, 'customer_email_snapshot'),
+      format: '', location: '', purpose: '', notes: '',
+      createdAt: createdAt,
+      cancelledAt: value(row, headers, 'cancelled_at'),
+      rescheduledTo: '',
+      _tokenHash: value(row, headers, 'manage_token_hash'),
+    };
+  }
+
+  function rowMatchesToken(row, headers, token) {
+    if (!token) return false;
+    if (value(row, headers, 'token') === token) return true;
+    return isHashedRow(row, headers) && value(row, headers, 'manage_token_hash') === TokenService.hashToken(token);
+  }
+
   function create(bookingData) {
     var sheet = getSheet();
-    var row = HEADERS.map(function (h) {
-      return bookingData[h] || '';
-    });
+    var headers = sheet.getDataRange().getValues()[0];
+    var row;
+    if (isVersioned(headers)) {
+      var start = new Date(bookingData.startTime);
+      var end = new Date(bookingData.endTime);
+      var fields = {
+        booking_id: 'BKG_' + Utilities.getUuid(),
+        service_id: bookingData.meetingTypeId,
+        service_name_snapshot: bookingData.meetingTypeName,
+        duration_minutes_snapshot: (end - start) / 60000,
+        customer_id: 'CUS_' + Utilities.getUuid(),
+        customer_name_snapshot: [bookingData.firstName, bookingData.lastName].filter(Boolean).join(' '),
+        customer_email_snapshot: bookingData.email,
+        customer_phone_snapshot: '',
+        start_at: bookingData.startTime,
+        end_at: bookingData.endTime,
+        quantity: 1,
+        status: String(bookingData.status || '').toUpperCase(),
+        calendar_event_id: bookingData.eventId,
+        manage_token_hash: TokenService.hashToken(bookingData.token),
+        created_at: bookingData.createdAt || new Date().toISOString(),
+        updated_at: bookingData.createdAt || new Date().toISOString(),
+        cancelled_at: bookingData.cancelledAt || '',
+        completed_at: '',
+      };
+      row = headers.map(function (header) { return fields[header] === undefined ? '' : fields[header]; });
+    } else {
+      row = HEADERS.map(function (header) { return bookingData[header] || ''; });
+    }
     sheet.appendRow(row);
     return bookingData;
   }
@@ -40,17 +122,8 @@ var BookingStore = (function () {
     if (data.length <= 1) return null; // Only headers
 
     var headerRow = data[0];
-    var tokenCol = headerRow.indexOf('token');
-    if (tokenCol === -1) return null;
-
     for (var i = 1; i < data.length; i++) {
-      if (data[i][tokenCol] === token) {
-        var booking = {};
-        for (var j = 0; j < headerRow.length; j++) {
-          booking[headerRow[j]] = data[i][j];
-        }
-        return booking;
-      }
+      if (rowMatchesToken(data[i], headerRow, token)) return decode(data[i], headerRow, token);
     }
     return null;
   }
@@ -61,18 +134,19 @@ var BookingStore = (function () {
     if (data.length <= 1) return false;
 
     var headerRow = data[0];
-    var tokenCol = headerRow.indexOf('token');
     var statusCol = headerRow.indexOf('status');
-    if (tokenCol === -1 || statusCol === -1) return false;
+    if (statusCol === -1) return false;
 
     for (var i = 1; i < data.length; i++) {
-      if (data[i][tokenCol] === token) {
+      if (rowMatchesToken(data[i], headerRow, token)) {
         var rowNum = i + 1; // 1-indexed
-        sheet.getRange(rowNum, statusCol + 1).setValue(newStatus);
+        var versioned = isHashedRow(data[i], headerRow);
+        sheet.getRange(rowNum, statusCol + 1).setValue(versioned ? String(newStatus).toUpperCase() : newStatus);
 
         if (extraFields) {
           for (var field in extraFields) {
-            var col = headerRow.indexOf(field);
+            var durableField = versioned && field === 'cancelledAt' ? 'cancelled_at' : field;
+            var col = headerRow.indexOf(durableField);
             if (col !== -1) {
               sheet.getRange(rowNum, col + 1).setValue(extraFields[field]);
             }
@@ -92,11 +166,7 @@ var BookingStore = (function () {
     var headerRow = data[0];
     var bookings = [];
     for (var i = 1; i < data.length; i++) {
-      var booking = {};
-      for (var j = 0; j < headerRow.length; j++) {
-        booking[headerRow[j]] = data[i][j];
-      }
-      bookings.push(booking);
+      bookings.push(decode(data[i], headerRow, ''));
     }
     return bookings;
   }
@@ -133,7 +203,8 @@ var BookingStore = (function () {
     for (var i = 0; i < all.length; i++) {
       var b = all[i];
       if (b.status !== 'confirmed') continue;
-      if (excludeToken && b.token === excludeToken) continue;
+      if (excludeToken && (b.token === excludeToken ||
+          (b._tokenHash && b._tokenHash === TokenService.hashToken(excludeToken)))) continue;
 
       // startTime/endTime may come back as ISO strings or as Date values
       // (Sheets can auto-coerce datetime-looking cells); new Date() handles both.
@@ -158,14 +229,16 @@ var BookingStore = (function () {
 
     var headerRow = data[0];
     var startTimeCol = headerRow.indexOf('startTime');
-    if (startTimeCol === -1) return 0;
+    var startAtCol = headerRow.indexOf('start_at');
+    if (startTimeCol === -1 && startAtCol === -1) return 0;
 
     var cutoff = new Date(Date.now() - olderThanDays * 24 * 60 * 60 * 1000);
     var deletedCount = 0;
 
     // Walk rows bottom-up so deleting doesn't shift indices
     for (var i = data.length - 1; i >= 1; i--) {
-      var startTime = new Date(data[i][startTimeCol]);
+      var column = isHashedRow(data[i], headerRow) ? startAtCol : startTimeCol;
+      var startTime = new Date(data[i][column]);
       if (startTime < cutoff) {
         sheet.deleteRow(i + 1); // 1-indexed
         deletedCount++;

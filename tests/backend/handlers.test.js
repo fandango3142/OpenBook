@@ -62,6 +62,19 @@ function makeCtx(overrides) {
   return ctx;
 }
 
+function makeFreshCtx() {
+  const winStart = Date.now() + 48 * HOUR;
+  const winEnd = winStart + 2 * HOUR;
+  const ctx = loadBackend({
+    config: BASE_CONFIG,
+    calendarEvents: { [CAL]: [ev('Jeremy office hours', winStart, winEnd)] },
+    sheets: {},
+    reflectCreatedEvents: false,
+  }, FILES);
+  ctx._winStart = winStart;
+  return ctx;
+}
+
 function bookingData(_ctx, startMs, endMs, extra) {
   return Object.assign({
     meetingTypeId: 'office-hours',
@@ -77,6 +90,54 @@ function bookingData(_ctx, startMs, endMs, extra) {
 }
 
 const r = createRunner('handleCreateBooking / handleRescheduleBooking (end-to-end)');
+
+r.test('fresh schema booking stays readable and blocks a second booking without persisting its token', function () {
+  const ctx = makeFreshCtx();
+  ctx.ensureApplicationReady();
+  const start = new Date(ctx._winStart + 60 * MIN).toISOString();
+  const end = new Date(ctx._winStart + 90 * MIN).toISOString();
+  const token = 'secret-manage-token';
+  ctx.BookingStore.create({
+    token: token, tokenExpiresAt: new Date(Date.now() + 90 * 24 * HOUR).toISOString(),
+    status: 'confirmed', meetingTypeId: 'office-hours', meetingTypeName: 'Office hours',
+    startTime: start, endTime: end, firstName: 'Sam', lastName: 'Student',
+    email: 'sam@example.edu', createdAt: new Date().toISOString(),
+  });
+  const stored = ctx._sheets.Bookings.rows[1];
+  assert.ok(!JSON.stringify(stored).includes(token));
+  const headers = ctx._sheets.Bookings.rows[0];
+  assert.ok(/^BKG_/.test(stored[headers.indexOf('booking_id')]));
+  assert.strictEqual(stored[headers.indexOf('status')], 'CONFIRMED');
+  assert.strictEqual(stored[headers.indexOf('manage_token_hash')], ctx.TokenService.hashToken(token));
+  assert.strictEqual(ctx.BookingStore.getByToken(token).status, 'confirmed');
+  assert.strictEqual(ctx.TokenService.validateToken(token), true);
+  assert.strictEqual(ctx.BookingStore.getByToken(''), null);
+  assert.strictEqual(ctx.BookingStore.updateStatus('', 'cancelled'), false);
+  assert.ok(ctx.BookingStore.findOverlappingConfirmed(start, end, null));
+  const second = parseResponse(ctx.handleCreateBooking(bookingData(ctx, new Date(start).getTime(), new Date(end).getTime())));
+  assert.strictEqual(second.error, 'SLOT_TAKEN');
+  assert.strictEqual(ctx._createdEvents.length, 0);
+  assert.strictEqual(ctx.BookingStore.updateStatus(token, 'cancelled', { cancelledAt: new Date().toISOString() }), true);
+  assert.strictEqual(stored[headers.indexOf('status')], 'CANCELLED');
+  assert.strictEqual(ctx.BookingStore.getByToken(token).status, 'cancelled');
+  assert.strictEqual(ctx.BookingStore.findOverlappingConfirmed(start, end, null), null);
+});
+
+r.test('two routed bookings on fresh schema cannot claim the same slot during Calendar lag', function () {
+  const ctx = makeFreshCtx();
+  const start = ctx._winStart + 60 * MIN;
+  const end = ctx._winStart + 90 * MIN;
+  function post(data) {
+    return parseResponse(ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ action: 'createBooking' }, data)) } }));
+  }
+  const first = post(bookingData(ctx, start, end));
+  assert.strictEqual(first.success, true, JSON.stringify(first));
+  assert.ok(ctx.BookingStore.getByToken(first.booking.token));
+  assert.ok(!JSON.stringify(ctx._sheets.Bookings.rows[1]).includes(first.booking.token));
+  const second = post(bookingData(ctx, start, end, { email: 'second@example.edu' }));
+  assert.strictEqual(second.error, 'SLOT_TAKEN');
+  assert.strictEqual(ctx._createdEvents.length, 1);
+});
 
 // --- BUG A end-to-end: an off-grid 45-min slot books successfully ---
 r.test('books an off-grid 45-min slot (the 10:30 case) through the full handler', function () {

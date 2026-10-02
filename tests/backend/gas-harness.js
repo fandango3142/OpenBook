@@ -17,6 +17,7 @@
 const vm = require('vm');
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
 
 const BACKEND = path.join(__dirname, '..', '..', 'backend');
 
@@ -181,7 +182,15 @@ function loadBackend(opts, files) {
 
   // --- Misc GAS globals ---
   var uuidCounter = 0;
-  sandbox.Utilities = { getUuid: function () { uuidCounter++; return 'token-' + uuidCounter; } };
+  sandbox.Utilities = {
+    DigestAlgorithm: { SHA_256: 'SHA_256' },
+    getUuid: function () { uuidCounter++; return 'token-' + uuidCounter; },
+    computeDigest: function (algorithm, value) {
+      if (algorithm !== 'SHA_256') throw new Error('Unsupported digest algorithm');
+      return Array.from(crypto.createHash('sha256').update(String(value), 'utf8').digest(),
+        function (byte) { return byte > 127 ? byte - 256 : byte; });
+    },
+  };
   // Stateful in-memory cache so rate-limiting (keyed per client) is exercisable.
   // TTL is ignored (tests fire synchronously); counts accumulate within a run.
   const cacheStore = {};
