@@ -1,5 +1,6 @@
 /**
- * Config — wrapper around PropertiesService for script-level configuration.
+ * Config — bootstrap script properties. Versioned domain settings live in the
+ * Settings sheet and are read through SheetStore after Schema.ensureCurrent().
  */
 
 var Config = (function () {

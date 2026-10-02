@@ -24,7 +24,9 @@ const BACKEND = path.join(__dirname, '..', '..', 'backend');
  * @param {object} opts
  *   config: {KEY: value} overrides for Config.get
  *   calendarEvents: {calendarId: [rawEventResource]} for Calendar.Events.list
- *   bookingRows: 2D array (incl. header row) backing the Bookings sheet
+ *   bookingRows: legacy 2D array (incl. header row) backing the Bookings sheet
+ *   sheets: {name: 2D array} backing named sheets
+ *   failAppendFor/failUpdateFor: sheet names whose writes throw
  *   lock: boolean — whether LockService.tryLock succeeds (default true)
  *   reflectCreatedEvents: boolean — echo createEvent() into Events.list (default false)
  * @param {string[]} files - .gs filenames to load (in order)
@@ -190,51 +192,82 @@ function loadBackend(opts, files) {
   var mailQuota = opts.mailQuota === undefined ? 50 : opts.mailQuota;
   sandbox.MailApp = { getRemainingDailyQuota: function () { return mailQuota; } };
 
-  // --- SpreadsheetApp stub backing BookingStore via an in-memory 2D array ---
-  if (bookingRows) {
-    var sheet = {
-      _rows: bookingRows,
-      getDataRange: function () {
-        return { getValues: function () { return sheet._rows; } };
+  // --- SpreadsheetApp stub with independently named sheets ---
+  const sheets = {};
+  const failAppendFor = (opts.failAppendFor || []).slice();
+  const failUpdateFor = (opts.failUpdateFor || []).slice();
+  sandbox._sheets = sheets;
+  sandbox._failAppendFor = failAppendFor;
+  sandbox._failUpdateFor = failUpdateFor;
+  function makeSheet(name, initialRows) {
+    const sheet = {
+      name: name,
+      rows: (initialRows || []).map(function (row) { return row.slice(); }),
+      createCount: 1,
+      getDataRange: function () { return this.getRange(1, 1, this.getLastRow(), this.getLastColumn()); },
+      appendRow: function (row) {
+        if (failAppendFor.indexOf(name) !== -1) throw new Error('append failed for ' + name);
+        this.rows.push(row.slice());
       },
-      appendRow: function (row) { sheet._rows.push(row.slice()); },
+      getLastRow: function () { return this.rows.length; },
+      getLastColumn: function () { return this.rows[0] ? this.rows[0].length : 0; },
       getRange: function (row, col, numRows, numCols) {
-        if (numRows === undefined) {
-          return {
-            setValue: function (v) { sheet._rows[row - 1][col - 1] = v; },
-            getValue: function () { return sheet._rows[row - 1][col - 1]; },
-          };
-        }
+        const self = this;
+        numRows = numRows === undefined ? 1 : numRows;
+        numCols = numCols === undefined ? 1 : numCols;
         return {
-          setValues: function (vals) {
-            for (var r = 0; r < numRows; r++) {
-              for (var c = 0; c < numCols; c++) sheet._rows[row - 1 + r][col - 1 + c] = vals[r][c];
-            }
+          getValue: function () { return self.rows[row - 1] && self.rows[row - 1][col - 1]; },
+          setValue: function (value) {
+            if (failUpdateFor.indexOf(name) !== -1) throw new Error('update failed for ' + name);
+            if (!self.rows[row - 1]) self.rows[row - 1] = [];
+            self.rows[row - 1][col - 1] = value;
           },
           getValues: function () {
-            var out = [];
-            for (var r = 0; r < numRows; r++) {
-              var rr = [];
-              for (var c = 0; c < numCols; c++) rr.push(sheet._rows[row - 1 + r][col - 1 + c]);
-              out.push(rr);
+            const out = [];
+            for (let r = 0; r < numRows; r++) {
+              const line = [];
+              for (let c = 0; c < numCols; c++) {
+                const value = (self.rows[row - 1 + r] || [])[col - 1 + c];
+                line.push(value === undefined ? '' : value);
+              }
+              out.push(line);
             }
             return out;
           },
+          setValues: function (values) {
+            if (failUpdateFor.indexOf(name) !== -1) throw new Error('update failed for ' + name);
+            for (let r = 0; r < numRows; r++) {
+              if (!self.rows[row - 1 + r]) self.rows[row - 1 + r] = [];
+              for (let c = 0; c < numCols; c++) self.rows[row - 1 + r][col - 1 + c] = values[r][c];
+            }
+          },
         };
       },
-      deleteRow: function (row) { sheet._rows.splice(row - 1, 1); },
+      deleteRow: function (row) { this.rows.splice(row - 1, 1); },
     };
-    sandbox.SpreadsheetApp = {
-      openById: function () {
-        return {
-          getSheetByName: function () { return sheet; },
-          insertSheet: function () { return sheet; },
-        };
-      },
-      flush: function () {},
-    };
-    sandbox._sheet = sheet;
+    Object.defineProperty(sheet, '_rows', { get: function () { return this.rows; }, set: function (value) { this.rows = value; } });
+    return sheet;
   }
+  Object.keys(opts.sheets || {}).forEach(function (name) { sheets[name] = makeSheet(name, opts.sheets[name]); });
+  if (bookingRows) {
+    sheets.Bookings = makeSheet('Bookings', bookingRows);
+    sandbox._sheet = sheets.Bookings;
+  }
+  sandbox.SpreadsheetApp = {
+    openById: function () {
+      return {
+        getSheetByName: function (name) { return sheets[name] || null; },
+        insertSheet: function (name) { return (sheets[name] = makeSheet(name, [])); },
+      };
+    },
+    flush: function () {},
+  };
+  sandbox._setSetting = function (key, value) {
+    const sheet = sheets.Settings || (sheets.Settings = makeSheet('Settings', [['key', 'value']]));
+    const row = sheet.rows.find(function (r) { return r[0] === key; });
+    if (row) row[1] = value;
+    else sheet.rows.push([key, value]);
+  };
 
   const ctx = vm.createContext(sandbox);
   files.forEach(function (f) {
