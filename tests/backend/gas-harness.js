@@ -117,7 +117,10 @@ function loadBackend(opts, files) {
           // null. This lets tests model an event removed out-of-band (directly on
           // the calendar) by flipping _deleted without touching the sheet row.
           if (!found || found._deleted) return null;
-          return { deleteEvent: function () { found._deleted = true; } };
+          return {
+            getLocation: function () { return found.options.location || ''; },
+            deleteEvent: function () { found._deleted = true; },
+          };
         },
         // Returns only ACTIVE events overlapping [start, end] (deleted ones are
         // absent), mirroring CalendarApp.getEvents used by eventIsActive.

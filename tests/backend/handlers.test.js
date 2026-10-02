@@ -139,6 +139,24 @@ r.test('two routed bookings on fresh schema cannot claim the same slot during Ca
   assert.strictEqual(ctx._createdEvents.length, 1);
 });
 
+r.test('fresh-schema reschedule retains Calendar location without a Sheet column', function () {
+  const ctx = makeFreshCtx();
+  const start = ctx._winStart + 15 * MIN;
+  const end = ctx._winStart + 45 * MIN;
+  const first = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify(Object.assign(
+    { action: 'createBooking' }, bookingData(ctx, start, end, { location: 'Room 42' })
+  )) } }));
+  assert.strictEqual(first.success, true, JSON.stringify(first));
+  const next = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({
+    action: 'rescheduleBooking', oldToken: first.booking.token,
+    newStart: new Date(ctx._winStart + 75 * MIN).toISOString(),
+    newEnd: new Date(ctx._winStart + 105 * MIN).toISOString(),
+  }) } }));
+  assert.strictEqual(next.success, true, JSON.stringify(next));
+  assert.strictEqual(ctx._createdEvents[1].options.location, 'Room 42');
+  assert.strictEqual(ctx._sheets.Bookings.rows[0].indexOf('location'), -1);
+});
+
 // --- BUG A end-to-end: an off-grid 45-min slot books successfully ---
 r.test('books an off-grid 45-min slot (the 10:30 case) through the full handler', function () {
   const ctx = makeCtx();

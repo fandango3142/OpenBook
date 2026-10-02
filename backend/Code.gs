@@ -366,11 +366,15 @@ function handleRescheduleBooking(data) {
       return jsonResponse({ success: false, error: 'SLOT_TAKEN', message: 'This time slot is no longer available. Please select another time.' });
     }
 
+    // The v1 Bookings schema intentionally has no location column. Preserve
+    // the existing Calendar event's location before deleting it.
+    var eventLocation = oldBooking.location || '';
     // Delete old calendar event
     try {
       var calendar = CalendarApp.getCalendarById(Config.get('CALENDAR_ID'));
       var oldEvent = calendar.getEventById(oldBooking.eventId);
       if (oldEvent) {
+        if (!eventLocation) eventLocation = oldEvent.getLocation() || '';
         oldEvent.deleteEvent();
       }
     } catch (err) {
@@ -400,7 +404,7 @@ function handleRescheduleBooking(data) {
     var newEvent = calendar.createEvent(eventTitle, newStart, newEnd, {
       guests: oldBooking.email,
       sendInvites: true,
-      location: oldBooking.location,
+      location: eventLocation,
       description: description,
     });
 
@@ -418,7 +422,7 @@ function handleRescheduleBooking(data) {
       lastName: oldBooking.lastName,
       email: oldBooking.email,
       format: oldBooking.format,
-      location: oldBooking.location,
+      location: eventLocation,
       purpose: oldBooking.purpose,
       notes: oldBooking.notes,
       createdAt: new Date().toISOString(),
