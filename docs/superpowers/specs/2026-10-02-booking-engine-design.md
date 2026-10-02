@@ -206,6 +206,8 @@ value
 
 Settings include business identity, timezone, dedicated booking Calendar ID, zero or more conflict Calendar IDs, authorized dashboard users, booking-window days, minimum notice, slot interval, customer cancellation, customer rescheduling, and email configuration.
 
+Every installation begins with `schema_version = 1`. Startup and setup compare the stored version with the code's current schema version. When the stored version is older, `runMigrations()` applies each intervening migration in order and updates `schema_version` only after that migration succeeds. A stored version newer than the running code fails closed with a clear incompatibility error. Migrations are idempotent and create or add sheets, headers, settings, and indexes without requiring operators to edit storage sheets manually.
+
 ## Booking Lifecycle
 
 Milestone states are:
@@ -249,7 +251,7 @@ AND requested range does not overlap a configured Calendar conflict
 AND service capacity - reserved quantity >= requested quantity
 ```
 
-Capacity accounting includes `CONFIRMED`, `CANCELLATION_REQUESTED`, and `RESCHEDULE_REQUESTED` bookings. Cancelled, completed, and no-show bookings do not consume future capacity.
+Capacity calculations only consider bookings whose occupied interval overlaps the candidate interval. Active scheduled states are `CONFIRMED`, `CANCELLATION_REQUESTED`, and `RESCHEDULE_REQUESTED`. Terminal states do not consume capacity, and the server permits transitions to `COMPLETED` or `NO_SHOW` only after the booking's start time has passed. This prevents an operator from reopening a future slot by prematurely applying a terminal state.
 
 Confirmed booking events are created on a dedicated booking calendar. That calendar is not treated as an external conflict source because Sheets performs authoritative capacity accounting. Configured conflict calendars represent unrelated busy time and block the service's entire capacity for the overlapping interval. If an operator intentionally includes the booking calendar among conflict calendars, the Calendar adapter must ignore event IDs linked to active bookings so one reservation does not incorrectly consume every remaining capacity unit.
 
@@ -398,6 +400,10 @@ Pure domain tests cover:
 - Cross-day and invalid windows
 - Availability exceptions
 - Booking-window and minimum-notice boundaries
+- Business-timezone conversion
+- DST transition boundaries, including missing and repeated local times
+- Browser timezone differing from the business timezone
+- Calendar timezone differing from the business timezone
 - Half-open overlap rules
 - Service buffers
 - Capacity arithmetic and quantities
@@ -433,6 +439,9 @@ Before milestone acceptance, deploy to a test Apps Script project and verify:
 6. Business approval releases capacity
 7. Rescheduling preserves the booking ID and original booking on failure
 8. Emails contain working management links
+9. Browser, business, and Calendar timezone differences preserve the intended business-local slot
+10. A test deployment in a DST-observing timezone handles both spring-forward and fall-back boundaries
+11. A schema-version upgrade runs automatically and remains safe when repeated
 
 ## Acceptance Criteria
 
@@ -445,8 +454,10 @@ Milestone 1 is complete when:
 - Customer management links reveal only the associated booking.
 - Cancellation requests do not release capacity before approval.
 - Business users can create, reschedule, cancel, complete, and mark no-show bookings.
+- Completed and no-show transitions are rejected before the booking start time.
 - Availability exceptions report affected bookings without silently altering them.
 - Booking lifecycle events are append-only and auditable.
+- Schema migrations upgrade older installations without manual Sheet-column edits.
 - Automated tests pass and the Google integration smoke test succeeds.
 - Upstream MIT attribution is preserved.
 
