@@ -1,0 +1,34 @@
+meeting_types:
+  - id: office-hours
+    name: "Office hours"
+    description: "Meet with me about a course you're enrolled in this term."
+
+  - id: chat-check-in
+    name: "Chat or check-in"
+    description: "Chat or check in with me about some aspect of your research or anything else you'd like to talk with me about."
+    instructions: "Please share a Google Doc with your agenda and supporting materials before our meeting."
+
+  - id: project-meeting
+    name: "Project meeting"
+    description: "Discuss or provide an update on a lab project."
+    instructions: "Please share a Google Doc with your agenda and supporting materials before our meeting."
+
+  - id: walk
+    name: "Walk"
+    description: "Go for a walk and talk."
+    allowed_durations: [30, 45, 60]
+    allowed_locations: ["in-person"]
+    location_override: "Meet at Jeremy's office — Moore 349"
+    event_label: "walk"
+
+  - id: grab-coffee
+    name: "Grab coffee"
+    description: "Grab a coffee and chat."
+    allowed_durations: [30, 45, 60]
+    allowed_locations: ["in-person"]
+    location_override: "Meet at Jeremy's office — Moore 349"
+    event_label: "coffee"
+
+  - id: other
+    name: "Other"
+    description: "For non-standard meetings. Please specify details in the booking form."
