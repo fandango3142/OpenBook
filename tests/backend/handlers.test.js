@@ -41,7 +41,7 @@ function ev(summary, startMs, endMs, extra) {
   }, extra || {});
 }
 
-const FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'Code.gs'];
+const FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'SheetStore.gs', 'Schema.gs', 'Code.gs'];
 
 /** Build a harness with a 2-hour availability window 48h out, seeded sheet header. */
 function makeCtx(overrides) {

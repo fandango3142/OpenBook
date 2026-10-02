@@ -125,7 +125,7 @@ r.test('never cancels a freshly-created row even if its event is not yet visible
 });
 
 // --- doGet 'reconcile' action (key-gated, for the scheduled maintenance job) ---
-const FULL_FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'Reconcile.gs', 'Code.gs'];
+const FULL_FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'SheetStore.gs', 'Schema.gs', 'Reconcile.gs', 'Code.gs'];
 
 function makeFullCtx(specs, cleanupKey) {
   const ctx = loadBackend({

@@ -16,29 +16,36 @@ function doGet(e) {
     });
   }
 
-  // Maintenance actions (reconcile/cleanup). NOTE: for the scheduled job these
-  // should be called via POST with the key in the BODY (see doPost) — a key in a
-  // GET query string is logged and forwarded on redirects. This GET path is kept
-  // for manual/ad-hoc use only.
-  var admin = handleAdminAction(action, (e && e.parameter && e.parameter.key) || '');
-  if (admin) return admin;
+  try {
+    ensureApplicationReady();
 
-  if (action === 'debug') {
-    if (!rateBump(CacheService.getScriptCache(), 'rlg_debug', 10, 60)) {
-      return jsonResponse({ success: false, error: 'RATE_LIMITED', message: 'Too many requests.' });
+    // Maintenance actions (reconcile/cleanup). NOTE: for the scheduled job these
+    // should be called via POST with the key in the BODY (see doPost) — a key in a
+    // GET query string is logged and forwarded on redirects. This GET path is kept
+    // for manual/ad-hoc use only.
+    var admin = handleAdminAction(action, (e && e.parameter && e.parameter.key) || '');
+    if (admin) return admin;
+
+    if (action === 'debug') {
+      if (!rateBump(CacheService.getScriptCache(), 'rlg_debug', 10, 60)) {
+        return jsonResponse({ success: false, error: 'RATE_LIMITED', message: 'Too many requests.' });
+      }
+      var debugKey = (e && e.parameter && e.parameter.key) || '';
+      var cleanupKey = Config.get('CLEANUP_KEY');
+      if (!cleanupKey || debugKey !== cleanupKey) {
+        return jsonResponse({ success: false, error: 'UNAUTHORIZED' });
+      }
+      return jsonResponse({ success: true, debug: CalendarService.debug(
+        new Date((e && e.parameter && e.parameter.start) || Date.now()),
+        new Date((e && e.parameter && e.parameter.end) || (Date.now() + 7 * 24 * 60 * 60 * 1000))
+      )});
     }
-    var debugKey = (e && e.parameter && e.parameter.key) || '';
-    var cleanupKey = Config.get('CLEANUP_KEY');
-    if (!cleanupKey || debugKey !== cleanupKey) {
-      return jsonResponse({ success: false, error: 'UNAUTHORIZED' });
-    }
-    return jsonResponse({ success: true, debug: CalendarService.debug(
-      new Date((e && e.parameter && e.parameter.start) || Date.now()),
-      new Date((e && e.parameter && e.parameter.end) || (Date.now() + 7 * 24 * 60 * 60 * 1000))
-    )});
+
+    return jsonResponse({ success: false, error: 'UNKNOWN_ACTION', message: 'Unknown action: ' + action });
+  } catch (err) {
+    Logger.log('Error handling action ' + action + ': ' + err.message + '\n' + err.stack);
+    return jsonResponse({ success: false, error: 'INTERNAL_ERROR', message: 'An internal error occurred. Please try again.' });
   }
-
-  return jsonResponse({ success: false, error: 'UNKNOWN_ACTION', message: 'Unknown action: ' + action });
 }
 
 function doPost(e) {
@@ -61,6 +68,7 @@ function doPost(e) {
   }
 
   try {
+    ensureApplicationReady();
     // Key-gated maintenance actions (reconcile/cleanup) authenticate with the key
     // in the BODY, so the secret never appears in a URL query string or gets
     // forwarded to another host on a redirect. This is the path the scheduled
@@ -97,6 +105,8 @@ function doPost(e) {
     return jsonResponse({ success: false, error: 'INTERNAL_ERROR', message: 'An internal error occurred. Please try again.' });
   }
 }
+
+function ensureApplicationReady() { return runMigrations(); }
 
 function handleGetAvailableSlots(data) {
   if (!data.startDate || !data.endDate || !data.durationMinutes) {

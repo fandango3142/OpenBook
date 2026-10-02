@@ -144,11 +144,16 @@ function loadBackend(opts, files) {
   };
 
   // --- LockService stub ---
+  let lockHeld = false;
   sandbox.LockService = {
     getScriptLock: function () {
       return {
-        tryLock: function () { return lockGranted; },
-        releaseLock: function () {},
+        tryLock: function () {
+          if (!lockGranted || lockHeld) return false;
+          lockHeld = true;
+          return true;
+        },
+        releaseLock: function () { lockHeld = false; },
       };
     },
   };

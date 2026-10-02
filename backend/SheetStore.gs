@@ -67,14 +67,17 @@ var SheetStore = (function () {
     var idIndex = data.headers.indexOf(idColumn);
     if (idIndex === -1) throw new Error('Unknown column: ' + idColumn);
     validateColumns(data.headers, patch);
+    var match = -1;
     for (var i = 1; i < data.values.length; i++) {
       if (data.values[i][idIndex] !== id) continue;
-      Object.keys(patch).forEach(function (key) {
-        target.getRange(i + 1, data.headers.indexOf(key) + 1).setValue(patch[key]);
-      });
-      return true;
+      if (match !== -1) throw new Error('Duplicate ID in ' + name + ': ' + idColumn);
+      match = i;
     }
-    return false;
+    if (match === -1) return false;
+    Object.keys(patch).forEach(function (key) {
+      target.getRange(match + 1, data.headers.indexOf(key) + 1).setValue(patch[key]);
+    });
+    return true;
   }
 
   function getSetting(key) {
@@ -84,10 +87,13 @@ var SheetStore = (function () {
     var keyIndex = data.headers.indexOf('key');
     var valueIndex = data.headers.indexOf('value');
     if (keyIndex < 0 || valueIndex < 0) return '';
+    var match = -1;
     for (var i = 1; i < data.values.length; i++) {
-      if (data.values[i][keyIndex] === key) return data.values[i][valueIndex];
+      if (data.values[i][keyIndex] !== key) continue;
+      if (match !== -1) throw new Error('Duplicate setting: ' + key);
+      match = i;
     }
-    return '';
+    return match === -1 ? '' : data.values[match][valueIndex];
   }
 
   function setSetting(key, value) {

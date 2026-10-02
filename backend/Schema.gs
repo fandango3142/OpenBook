@@ -16,7 +16,7 @@ var Schema = (function () {
     },
   };
 
-  function ensureCurrent() {
+  function ensureCurrentUnlocked() {
     var stored = Number(SheetStore.getSetting('schema_version') || 0);
     if (!isFinite(stored) || stored < 0 || Math.floor(stored) !== stored) {
       throw new Error('Invalid stored schema version');
@@ -27,6 +27,16 @@ var Schema = (function () {
       SheetStore.setSetting('schema_version', next);
     }
     return CURRENT_VERSION;
+  }
+
+  function ensureCurrent() {
+    var lock = LockService.getScriptLock();
+    if (!lock.tryLock(10000)) throw new Error('Schema migration lock unavailable');
+    try {
+      return ensureCurrentUnlocked();
+    } finally {
+      try { SpreadsheetApp.flush(); } finally { lock.releaseLock(); }
+    }
   }
 
   return { CURRENT_VERSION: CURRENT_VERSION, HEADERS: HEADERS, ensureCurrent: ensureCurrent };

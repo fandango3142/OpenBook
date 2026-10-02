@@ -1,5 +1,5 @@
 const assert = require('assert');
-const { loadBackend } = require('./gas-harness');
+const { loadBackend, parseResponse } = require('./gas-harness');
 const { createRunner } = require('./_runner');
 
 const r = createRunner('versioned sheet schema and storage');
@@ -66,6 +66,53 @@ r.test('storage rejects unknown columns and propagates write failures', function
   assert.throws(() => ctx.SheetStore.append('Services', { typo: 'value' }), /Unknown column/);
   assert.throws(() => ctx.SheetStore.updateById('Services', 'service_id', 'svc-1', { name: 'New' }), /update failed/);
   assert.strictEqual(ctx._sheets.Services.rows[1][1], 'Old');
+});
+
+r.test('normal routed request initializes schema before handling the action', function () {
+  const ctx = loadBackend({ config: { SPREADSHEET_ID: 'test-sheet' }, sheets: {} }, ['SheetStore.gs', 'Schema.gs', 'Code.gs']);
+  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailableSlots' }) } }));
+  assert.strictEqual(response.error, 'VALIDATION_ERROR');
+  assert.strictEqual(String(ctx.SheetStore.getSetting('schema_version')), '1');
+  assert.ok(ctx._sheets.Services);
+});
+
+r.test('routed request fails closed without exposing a newer stored schema', function () {
+  const ctx = loadBackend({
+    config: { SPREADSHEET_ID: 'test-sheet' },
+    sheets: { Settings: [['key', 'value'], ['schema_version', '2']] },
+  }, ['SheetStore.gs', 'Schema.gs', 'Code.gs']);
+  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailableSlots' }) } }));
+  assert.strictEqual(response.error, 'INTERNAL_ERROR');
+  assert.ok(!JSON.stringify(response).includes('newer than this code'));
+  assert.strictEqual(ctx._sheets.Services, undefined);
+});
+
+r.test('reentrant first-run migration cannot create duplicate schema version rows', function () {
+  const ctx = makeCtx({ sheets: { Settings: [['key', 'value']] } });
+  const settings = ctx._sheets.Settings;
+  const originalAppend = settings.appendRow;
+  let blocked = false;
+  settings.appendRow = function (row) {
+    if (row[0] === 'schema_version') {
+      try { ctx.Schema.ensureCurrent(); } catch (err) { blocked = /lock/i.test(err.message); }
+    }
+    return originalAppend.call(this, row);
+  };
+  ctx.Schema.ensureCurrent();
+  assert.strictEqual(blocked, true);
+  assert.strictEqual(settings.rows.filter(row => row[0] === 'schema_version').length, 1);
+});
+
+r.test('updateById rejects duplicate IDs before changing any row', function () {
+  const ctx = makeCtx({ sheets: { Services: [['service_id', 'name'], ['svc-1', 'A'], ['svc-1', 'B']] } });
+  assert.throws(() => ctx.SheetStore.updateById('Services', 'service_id', 'svc-1', { name: 'New' }), /duplicate/i);
+  assert.deepStrictEqual(ctx._sheets.Services.rows.slice(1), [['svc-1', 'A'], ['svc-1', 'B']]);
+});
+
+r.test('duplicate stored schema versions fail closed', function () {
+  const ctx = makeCtx({ sheets: { Settings: [['key', 'value'], ['schema_version', '1'], ['schema_version', '2']] } });
+  assert.throws(() => ctx.Schema.ensureCurrent(), /duplicate/i);
+  assert.strictEqual(ctx._sheets.Services, undefined);
 });
 
 process.exit(r.done() === 0 ? 0 : 1);

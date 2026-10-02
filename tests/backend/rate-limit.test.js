@@ -35,7 +35,7 @@ const CONFIG = {
   RATE_LIMIT_READ_PER_CLIENT: '10',
 };
 
-const FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'Code.gs'];
+const FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'SheetStore.gs', 'Schema.gs', 'Code.gs'];
 
 function ev(summary, startMs, endMs, extra) {
   return Object.assign({
