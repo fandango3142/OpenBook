@@ -123,6 +123,35 @@ r.test('fresh schema booking stays readable and blocks a second booking without 
   assert.strictEqual(ctx.BookingStore.findOverlappingConfirmed(start, end, null), null);
 });
 
+r.test('versioned hashed tokens do not acquire a synthetic 90-day expiry', function () {
+  const ctx = makeFreshCtx();
+  ctx.ensureApplicationReady();
+  const token = 'old-but-valid-hashed-token';
+  ctx.BookingStore.create({
+    token: token,
+    tokenExpiresAt: '2026-04-01T00:00:00Z',
+    status: 'confirmed', meetingTypeId: 'office-hours', meetingTypeName: 'Office hours',
+    startTime: new Date(ctx._winStart + 60 * MIN).toISOString(),
+    endTime: new Date(ctx._winStart + 90 * MIN).toISOString(),
+    firstName: 'Sam', lastName: 'Student', email: 'sam@example.edu',
+    createdAt: '2026-01-01T00:00:00Z',
+  });
+  const decoded = ctx.BookingStore.getByToken(token);
+  assert.strictEqual(decoded.tokenExpiresAt, '');
+  assert.strictEqual(ctx.TokenService.validateToken(token), true);
+  const headers = ctx._sheets.Bookings.rows[0];
+  assert.strictEqual(headers.indexOf('tokenExpiresAt'), -1);
+  assert.ok(!JSON.stringify(ctx._sheets.Bookings.rows[1]).includes(token));
+});
+
+r.test('legacy token with an explicitly persisted expiry still expires', function () {
+  const ctx = makeCtx();
+  const headers = ctx.BookingStore.HEADERS;
+  const fields = { token: 'expired-legacy-token', status: 'confirmed', tokenExpiresAt: '2026-01-01T00:00:00Z' };
+  ctx._sheet._rows.push(headers.map(function (header) { return fields[header] || ''; }));
+  assert.strictEqual(ctx.TokenService.validateToken(fields.token), false);
+});
+
 r.test('two routed bookings on fresh schema cannot claim the same slot during Calendar lag', function () {
   const ctx = makeFreshCtx();
   const start = ctx._winStart + 60 * MIN;

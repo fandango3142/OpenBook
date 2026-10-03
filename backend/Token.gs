@@ -1,6 +1,7 @@
 /**
  * TokenService — generates and validates secure booking tokens.
- * Tokens are UUID v4 with a 90-day expiry window.
+ * New hashed tokens are UUID v4 and remain valid while the booking allows it.
+ * Legacy tokens honor an expiry explicitly stored with their booking.
  */
 
 var TokenService = (function () {
@@ -44,8 +45,8 @@ var TokenService = (function () {
     var booking = BookingStore.getByToken(token);
     if (!booking) return false;
 
-    // Check expiry
-    if (booking.tokenExpiresAt) {
+    // Only legacy rows can carry an explicitly stored expiry.
+    if (!booking._tokenHash && booking.tokenExpiresAt) {
       var expiryDate = new Date(booking.tokenExpiresAt);
       if (new Date() > expiryDate) return false;
     }

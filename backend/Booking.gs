@@ -46,17 +46,9 @@ var BookingStore = (function () {
     }
     var status = String(value(row, headers, 'status')).toLowerCase();
     var createdAt = value(row, headers, 'created_at');
-    var expiresAt = '';
-    if (createdAt) {
-      var created = new Date(createdAt);
-      if (!isNaN(created.getTime())) {
-        created.setDate(created.getDate() + (Config.getNumber('TOKEN_EXPIRY_DAYS') || 90));
-        expiresAt = created.toISOString();
-      }
-    }
     return {
       token: token || '',
-      tokenExpiresAt: expiresAt,
+      tokenExpiresAt: '',
       eventId: value(row, headers, 'calendar_event_id'),
       status: status,
       meetingTypeId: value(row, headers, 'service_id'),
