@@ -1,4 +1,51 @@
+/** Calendar conflicts for the Sheet-backed engine. API failures propagate closed. */
+var CalendarGateway = (function () {
+  function normalizedId(id) { return String(id || '').replace(/@google\.com$/i, ''); }
+
+  function listConflicts(start, end, linkedEventIds) {
+    var from = TimeService.instant(start), to = TimeService.instant(end);
+    if (from >= to) throw new Error('Invalid conflict interval');
+    var raw = SheetStore.getSetting('conflict_calendar_ids');
+    var ids;
+    try { ids = raw === '' ? [] : JSON.parse(raw); } catch (e) { throw new Error('Invalid conflict_calendar_ids'); }
+    if (!Array.isArray(ids) || ids.some(function (id) { return typeof id !== 'string' || !id.trim(); })) {
+      throw new Error('Invalid conflict_calendar_ids');
+    }
+    var bookingCalendar = SheetStore.getSetting('booking_calendar_id');
+    var linked = (linkedEventIds || []).map(normalizedId).filter(function (id) { return !!id; });
+    var result = [];
+    ids.filter(function (id, index) { return ids.indexOf(id) === index; }).forEach(function (id) {
+      var pageToken;
+      do {
+        var params = { timeMin: from.toISOString(), timeMax: to.toISOString(), singleEvents: true, maxResults: 250 };
+        if (pageToken) params.pageToken = pageToken;
+        var response = Calendar.Events.list(id, params);
+        (response.items || []).forEach(function (item) {
+          if (item.status === 'cancelled' || item.transparency === 'transparent') return;
+          if ((item.attendees || []).some(function (a) { return a.self && a.responseStatus === 'declined'; })) return;
+          if (id === bookingCalendar && (linked.indexOf(normalizedId(item.id)) !== -1 ||
+              linked.indexOf(normalizedId(item.iCalUID)) !== -1)) return;
+          if (!item.start || !item.end) throw new Error('Invalid Calendar interval');
+          var zone = item.start.timeZone || response.timeZone || SheetStore.getSetting('business_timezone');
+          var s = item.start.dateTime ? TimeService.instant(item.start.dateTime) :
+            TimeService.localDateTimeToInstant(item.start.date, '00:00', zone, 'earlier');
+          var e = item.end.dateTime ? TimeService.instant(item.end.dateTime) :
+            TimeService.localDateTimeToInstant(item.end.date, '00:00', item.end.timeZone || zone, 'later');
+          if (s >= e) throw new Error('Invalid Calendar interval');
+          if (s < to && from < e) result.push({ start_at: s.toISOString(), end_at: e.toISOString() });
+        });
+        pageToken = response.nextPageToken;
+      } while (pageToken);
+    });
+    return result;
+  }
+  return { listConflicts: listConflicts };
+})();
+
 /**
+ * Temporary legacy facade for Code.gs/Reconcile.gs until their migration.
+ * AvailabilityService does not call this calendar-derived availability path.
+ *
  * CalendarService — availability detection and slot generation.
  * Finds availability windows by title pattern match on the designated calendar,
  * then checks all calendars for conflicts to produce bookable slots.

@@ -21,6 +21,14 @@ const CONFIG = {
   SPREADSHEET_ID: 'sheet-1',
 };
 
+// These historical fixtures describe future September bookings. Keep their
+// intended chronology stable as the real calendar advances.
+const TEST_NOW = Date.parse('2026-08-15T12:00:00.000Z');
+class ReconcileTestDate extends Date {
+  constructor(...args) { super(...(args.length ? args : [TEST_NOW])); }
+  static now() { return TEST_NOW; }
+}
+
 // Build a 19-column row from a small spec, matching BookingStore.HEADERS order.
 function row(headers, spec) {
   return headers.map(function (h) { return Object.prototype.hasOwnProperty.call(spec, h) ? spec[h] : ''; });
@@ -28,6 +36,7 @@ function row(headers, spec) {
 
 function makeCtx(specs) {
   const ctx = loadBackend({ config: CONFIG, bookingRows: [], calendarEvents: { [CAL]: [] } }, FILES);
+  ctx.Date = ReconcileTestDate;
   const H = ctx.BookingStore.HEADERS;
   ctx._sheet._rows = [H.slice()].concat(specs.map(function (s) { return row(H, s); }));
   return ctx;
@@ -89,8 +98,8 @@ r.test('is a no-op when every confirmed booking still has its event', function (
 });
 
 r.test('never cancels a PAST booking, even if its event is gone (history is left alone)', function () {
-  const pastStart = new Date(Date.now() - 48 * 60 * 60 * 1000).toISOString();
-  const pastEnd = new Date(Date.now() - 47 * 60 * 60 * 1000).toISOString();
+  const pastStart = new Date(TEST_NOW - 48 * 60 * 60 * 1000).toISOString();
+  const pastEnd = new Date(TEST_NOW - 47 * 60 * 60 * 1000).toISOString();
   const ctx = makeCtx([
     { token: 't-past', eventId: 'evt-past', status: 'confirmed', createdAt: '2026-01-01T00:00:00.000Z', startTime: pastStart, endTime: pastEnd },
   ]);
@@ -112,7 +121,7 @@ r.test('never cancels a confirmed row with a blank eventId (unverifiable => keep
 });
 
 r.test('never cancels a freshly-created row even if its event is not yet visible', function () {
-  const nowIso = new Date().toISOString();
+  const nowIso = new Date(TEST_NOW).toISOString();
   const ctx = makeCtx([
     { token: 't-fresh', eventId: 'evt-lagging', status: 'confirmed', createdAt: nowIso, startTime: '2026-09-03T15:00:00.000Z', endTime: '2026-09-03T15:15:00.000Z' },
   ]);
@@ -133,6 +142,7 @@ function makeFullCtx(specs, cleanupKey) {
     bookingRows: [],
     calendarEvents: { [CAL]: [] },
   }, FULL_FILES);
+  ctx.Date = ReconcileTestDate;
   const H = ctx.BookingStore.HEADERS;
   ctx._sheet._rows = [H.slice()].concat(specs.map(function (s) { return row(H, s); }));
   return ctx;
