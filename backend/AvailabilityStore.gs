@@ -1,11 +1,19 @@
 /** Recurring windows and blocking exceptions are authoritative Sheet records. */
 var AvailabilityStore = (function () {
   var WEEKDAYS = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'];
-  function active(row) { return row.active === true || String(row.active).toLowerCase() === 'true'; }
+  function active(row) {
+    // Sheets checkboxes use booleans; text cells accept true/false in any case.
+    // Whitespace, blanks and other values are configuration errors, not false.
+    if (typeof row.active === 'boolean') return row.active;
+    if (typeof row.active === 'string' && /^(true|false)$/i.test(row.active)) {
+      return row.active.toLowerCase() === 'true';
+    }
+    throw new Error('Invalid active value');
+  }
 
   function listWindows(serviceId) {
     return SheetStore.readAll('Availability').filter(function (row) {
-      return row.service_id === serviceId && active(row);
+      return active(row) && row.service_id === serviceId;
     }).map(function (row) {
       var start = TimeService.clockMinutes(row.start_time);
       var end = TimeService.clockMinutes(row.end_time);

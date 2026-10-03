@@ -38,6 +38,41 @@ r.test('service-specific, inactive and other-service exceptions are filtered cor
   exception(ctx, { exception_id: 'EX_3', service_id: 'SRV_demo' });
   assert.strictEqual(check(ctx, '2026-10-05T04:30:00Z').code, 'SLOT_UNAVAILABLE');
 });
+r.test('malformed exception activation fails closed instead of opening its blocked interval', () => {
+  ['tru', 'true ', ' false', 'true\n', 'false\r\n', '\ttrue', ' ', '', undefined, null, 1, 0, 'yes', '1'].forEach(active => {
+    const ctx = make();
+    exception(ctx, { active });
+    assert.throws(() => check(ctx, '2026-10-05T04:30:00Z'), /Invalid active/, 'active=' + String(active));
+    assert.throws(() => ctx.AvailabilityService.listSlots(query), /Invalid active/);
+  });
+});
+r.test('malformed window activation fails closed instead of silently dropping configuration', () => {
+  ['tru', 'true ', ' false', 'true\n', 'false\r\n', '\ttrue', ' ', '', undefined, null, 1, 0, 'yes', '1'].forEach(active => {
+    const ctx = make();
+    ctx.SheetStore.updateById('Availability', 'availability_id', 'AV_0', { active });
+    assert.throws(() => ctx.AvailabilityStore.listWindows('SRV_demo'), /Invalid active/, 'active=' + String(active));
+    assert.throws(() => check(ctx, '2026-10-05T03:30:00Z'), /Invalid active/);
+  });
+});
+r.test('activation accepts booleans and case-normalized true/false strings only', () => {
+  [[true, true], ['true', true], ['TRUE', true], ['TrUe', true],
+    [false, false], ['false', false], ['FALSE', false], ['FaLsE', false]].forEach(([active, enabled]) => {
+    const ctx = make();
+    exception(ctx, { active });
+    assert.strictEqual(check(ctx, '2026-10-05T04:30:00Z').ok, !enabled);
+    ctx.SheetStore.updateById('Availability', 'availability_id', 'AV_0', { active });
+    assert.strictEqual(ctx.AvailabilityStore.listWindows('SRV_demo').length, enabled ? 2 : 1);
+  });
+});
+r.test('entirely blank trailing Sheet rows are not activation records', () => {
+  const ctx = make();
+  ['Availability', 'AvailabilityExceptions'].forEach(name => {
+    ctx._sheets[name].rows.push(ctx._sheets[name].rows[0].map(() => ''));
+    ctx._sheets[name].rows.push(ctx._sheets[name].rows[0].map(() => null));
+  });
+  assert.strictEqual(ctx.AvailabilityStore.listWindows('SRV_demo').length, 2);
+  assert.strictEqual(check(ctx, '2026-10-05T04:30:00Z').ok, true);
+});
 r.test('all active scheduled states reserve quantity; terminal and other-service rows do not', () => {
   ['CONFIRMED', 'CANCELLATION_REQUESTED', 'RESCHEDULE_REQUESTED'].forEach(status => {
     const ctx = make(); booking(ctx, { status, quantity: 3 });
