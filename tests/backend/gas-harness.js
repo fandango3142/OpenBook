@@ -39,6 +39,7 @@ function loadBackend(opts, files) {
   const bookingRows = opts.bookingRows || null;
   const lockGranted = opts.lock === undefined ? true : opts.lock;
   const reflectCreated = !!opts.reflectCreatedEvents;
+  const sheetTimezone = opts.sheetTimezone || 'Etc/UTC';
 
   const sandbox = {};
   const operationOrder = [];
@@ -302,6 +303,7 @@ function loadBackend(opts, files) {
       return {
         getSheetByName: function (name) { return sheets[name] || null; },
         insertSheet: function (name) { return (sheets[name] = makeSheet(name, [])); },
+        getSpreadsheetTimeZone: function () { return sheetTimezone; },
       };
     },
     flush: function () { operationOrder.push('flush'); },

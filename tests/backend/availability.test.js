@@ -64,6 +64,16 @@ r.test('activation accepts booleans and case-normalized true/false strings only'
     assert.strictEqual(ctx.AvailabilityStore.listWindows('SRV_demo').length, enabled ? 2 : 1);
   });
 });
+r.test('native Google Sheets time cells retain their wall clock in the spreadsheet timezone', () => {
+  const ctx = make({
+    sheetTimezone: 'Etc/GMT',
+    windows: [['Monday', new Date('1899-12-30T09:00:00.000Z'), new Date('1899-12-30T10:00:00.000Z')]],
+  });
+  const slots = ctx.AvailabilityService.listSlots(query);
+  assert.deepStrictEqual(Array.from(slots, slot => slot.start_at), [
+    '2026-10-05T03:30:00.000Z', '2026-10-05T04:00:00.000Z',
+  ]);
+});
 r.test('entirely blank trailing Sheet rows are not activation records', () => {
   const ctx = make();
   ['Availability', 'AvailabilityExceptions'].forEach(name => {

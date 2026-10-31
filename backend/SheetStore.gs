@@ -6,6 +6,8 @@ var SheetStore = (function () {
     return SpreadsheetApp.openById(id);
   }
 
+  function getSpreadsheetTimeZone() { return spreadsheet().getSpreadsheetTimeZone(); }
+
   function sheet(name) {
     var found = spreadsheet().getSheetByName(name);
     if (!found) throw new Error('Missing sheet: ' + name);
@@ -108,5 +110,6 @@ var SheetStore = (function () {
     updateById: updateById,
     getSetting: getSetting,
     setSetting: setSetting,
+    getSpreadsheetTimeZone: getSpreadsheetTimeZone,
   };
 })();

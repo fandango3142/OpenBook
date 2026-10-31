@@ -24,6 +24,7 @@ function timeContext() { return installFormatDate(loadBackend({}, ['Time.gs']));
 function make(opts = {}) {
   const ctx = installFormatDate(loadBackend({
     config: { SPREADSHEET_ID: 'test-sheet' }, calendarEvents: opts.calendarEvents || {},
+    sheetTimezone: opts.sheetTimezone,
   }, ['SheetStore.gs', 'Schema.gs', 'Domain.gs', 'Time.gs', 'ServiceStore.gs',
     'AvailabilityStore.gs', 'Calendar.gs', 'Availability.gs']));
   ctx.Schema.ensureCurrent();

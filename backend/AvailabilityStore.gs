@@ -12,16 +12,28 @@ var AvailabilityStore = (function () {
   }
 
   function listWindows(serviceId) {
+    var spreadsheetTimeZone = SheetStore.getSpreadsheetTimeZone();
     return SheetStore.readAll('Availability').filter(function (row) {
       return active(row) && row.service_id === serviceId;
     }).map(function (row) {
-      var start = TimeService.clockMinutes(row.start_time);
-      var end = TimeService.clockMinutes(row.end_time);
+      // Sheets returns time-formatted cells as Date objects. Extract their
+      // displayed wall clock using the Sheet timezone, then interpret that
+      // clock in the business timezone when evaluating availability.
+      var startTime = clockText(row.start_time, spreadsheetTimeZone);
+      var endTime = clockText(row.end_time, spreadsheetTimeZone);
+      var start = TimeService.clockMinutes(startTime);
+      var end = TimeService.clockMinutes(endTime);
       // Overnight schedules must be entered as separate local-day windows.
       if (WEEKDAYS.indexOf(row.weekday) === -1 || start >= end) throw new Error('Invalid availability window');
       return { availability_id: row.availability_id, service_id: serviceId, weekday: row.weekday,
-        start_time: row.start_time, end_time: row.end_time };
+        start_time: startTime, end_time: endTime };
     });
+  }
+
+  function clockText(value, spreadsheetTimeZone) {
+    if (Object.prototype.toString.call(value) !== '[object Date]') return value;
+    if (isNaN(value.getTime()) || !spreadsheetTimeZone) throw new Error('Invalid availability time');
+    return Utilities.formatDate(value, spreadsheetTimeZone, 'HH:mm');
   }
 
   function listExceptions(serviceId, start, end) {

@@ -58,7 +58,7 @@ In `Availability`, add two recurring windows for that service. This schedule int
 | `AVL_M1_AM` | `SRV_M1_TEST` | `Monday` | `09:00` | `12:00` | `TRUE` |
 | `AVL_M1_PM` | `SRV_M1_TEST` | `Monday` | `13:00` | `17:00` | `TRUE` |
 
-Repeat those two rows for the weekdays you want to exercise, using unique `availability_id` values. Weekday and time values are interpreted in `business_timezone`.
+Repeat those two rows for the weekdays you want to exercise, using unique `availability_id` values. Weekday and time values are interpreted in `business_timezone`. Google Sheets may store entries such as `09:00` as native time cells; OpenBook reads their displayed clock using the spreadsheet timezone and then treats that wall time as business-local. Plain-text `HH:mm` values are also accepted.
 
 ## 4. Add one blocking exception
 
