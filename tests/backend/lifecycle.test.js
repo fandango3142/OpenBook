@@ -155,6 +155,25 @@ r.test('cancellation approval removes the linked event and releases reserved cap
   assert.strictEqual(ctx._createdEvents[0]._deleted, true);
   assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 0);
   assert.strictEqual(ctx.BookingStore.getById(bookingId).cancelled_at !== '', true);
+  assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1)[0].event_type, 'BOOKING_CANCELLED');
+});
+
+r.test('retrying an idempotent cancellation retries Calendar cleanup after partial Sheet rollback', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  const originalDelete = ctx.CalendarGateway.deleteEvent;
+  let failOnce = true;
+  ctx.CalendarGateway.deleteEvent = id => {
+    if (failOnce) { failOnce = false; throw new Error('temporary calendar failure'); }
+    return originalDelete(id);
+  };
+  ctx._failUpdateAfter.Bookings = 3;
+  assert.throws(() => ctx.BookingService.cancel(created.booking.booking_id, 'owner@example.com'),
+    e => e.domainCode === 'INTERNAL_ERROR');
+  assert.strictEqual(ctx.BookingStore.getById(created.booking.booking_id).status, 'CANCELLED');
+  assert.strictEqual(ctx._createdEvents[0]._deleted, false);
+  assert.strictEqual(ctx.BookingService.cancel(created.booking.booking_id, 'owner@example.com').status, 'CANCELLED');
+  assert.strictEqual(ctx._createdEvents[0]._deleted, true);
 });
 
 r.test('rejecting a cancellation request returns it to confirmed and retains capacity', () => {

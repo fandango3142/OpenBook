@@ -238,7 +238,13 @@ var BookingService = (function () {
     }
     return LockGateway.withLock(10000, function () {
       var booking = requireExistingBooking(bookingId);
-      if (booking.status === to && idempotent) return booking;
+      if (booking.status === to && idempotent) {
+        if (removeCalendar && booking.calendar_event_id) {
+          try { CalendarGateway.deleteEvent(booking.calendar_event_id); }
+          catch (retryDeleteError) { throw error('INTERNAL_ERROR'); }
+        }
+        return booking;
+      }
       if (requiredFrom && booking.status !== requiredFrom) throw error('INVALID_STATE');
       var now = new Date();
       if (!Domain.canTransition(booking.status, to, booking, now)) throw error('INVALID_STATE');
@@ -259,7 +265,7 @@ var BookingService = (function () {
     });
   }
   function approveCancellation(bookingId, actor) {
-    return transition(bookingId, 'CANCELLED', actor, 'CANCELLATION_APPROVED',
+    return transition(bookingId, 'CANCELLED', actor, 'BOOKING_CANCELLED',
       { cancelled_at: new Date().toISOString() }, true, 'CANCELLATION_REQUESTED', true);
   }
   function rejectCancellation(bookingId, actor) {
