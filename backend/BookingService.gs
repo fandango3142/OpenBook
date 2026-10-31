@@ -31,6 +31,12 @@ var BookingService = (function () {
     if (value === '' || value === null || value === undefined) return false;
     return value === true || String(value).toLowerCase() === 'true' || String(value) === '1';
   }
+  function notify(booking, type, send) {
+    try { send(); }
+    catch (deliveryError) {
+      Logger.log('EMAIL_DELIVERY_FAILED booking_id=' + booking.booking_id + ' type=' + type);
+    }
+  }
   function managedRecord(token) {
     if (typeof token !== 'string' || !token || token.length > 512) throw error('INVALID_TOKEN');
     var record = BookingStore.getByTokenHash(TokenService.hash(token));
@@ -106,14 +112,9 @@ var BookingService = (function () {
       }
       return { booking: booking, token: issued.token };
     });
-    try {
-      // Adapt the transient payload to the existing mail renderer. Never persist it.
-      var b = committed.booking;
-      EmailService.sendBookingConfirmation({ token: committed.token, email: b.customer_email_snapshot,
-        firstName: b.customer_name_snapshot, lastName: '', meetingTypeId: b.service_id,
-        meetingTypeName: b.service_name_snapshot, startTime: b.start_at, endTime: b.end_at,
-        eventId: b.calendar_event_id, location: '', format: '', purpose: '', notes: '' });
-    } catch (deliveryError) { Logger.log('BOOKING_CONFIRMATION_DELIVERY_FAILED'); }
+    notify(committed.booking, 'CONFIRMATION', function () {
+      EmailService.sendConfirmation(committed.booking, committed.token);
+    });
     return { booking: publicBooking(committed.booking), manage_token: committed.token };
   }
   function getManaged(token) {
@@ -137,10 +138,9 @@ var BookingService = (function () {
       var requested = persistRequest(booking, 'CANCELLATION_REQUESTED');
       return { booking: requested, changed: true };
     });
-    if (result.changed && EmailService.sendCancellationRequested) {
-      try { EmailService.sendCancellationRequested(result.booking); }
-      catch (sendError) { Logger.log('CANCELLATION_REQUEST_EMAIL_FAILED'); }
-    }
+    if (result.changed) notify(result.booking, 'CANCELLATION_REQUESTED', function () {
+      EmailService.sendCancellationRequested(result.booking);
+    });
     return { booking: publicBooking(result.booking) };
   }
   function requestReschedule(token, requestedStart) {
@@ -198,7 +198,7 @@ var BookingService = (function () {
       if (schemaError.message === 'Schema migration lock unavailable') throw error('LOCK_TIMEOUT');
       throw schemaError;
     }
-    return LockGateway.withLock(10000, function () {
+    var movedBooking = LockGateway.withLock(10000, function () {
       var booking = requireExistingBooking(bookingId);
       if (booking.status !== 'CONFIRMED' && booking.status !== 'RESCHEDULE_REQUESTED') throw error('INVALID_STATE');
       if (!replacement || typeof replacement !== 'object' || Array.isArray(replacement) ||
@@ -217,7 +217,7 @@ var BookingService = (function () {
         var updated = persistLifecycle(booking, 'CONFIRMED', actor,
           { start_at: start, end_at: check.end_at }, 'BOOKING_RESCHEDULED',
           { previous_start_at: booking.start_at, previous_end_at: booking.end_at });
-        return updated;
+        return { booking: updated, previousInterval: { start_at: booking.start_at, end_at: booking.end_at } };
       } catch (err) {
         if (moved) {
           try { CalendarGateway.updateEvent(booking.calendar_event_id, oldCalendarInterval.start_at, oldCalendarInterval.end_at); }
@@ -226,6 +226,10 @@ var BookingService = (function () {
         throw err && err.domainCode ? err : error('INTERNAL_ERROR');
       }
     });
+    notify(movedBooking.booking, 'RESCHEDULED', function () {
+      EmailService.sendRescheduled(movedBooking.booking, movedBooking.previousInterval);
+    });
+    return movedBooking.booking;
   }
   function cancel(bookingId, actor) {
     return transition(bookingId, 'CANCELLED', actor, 'BOOKING_CANCELLED', { cancelled_at: new Date().toISOString() }, true, null, true);
@@ -265,11 +269,15 @@ var BookingService = (function () {
     });
   }
   function approveCancellation(bookingId, actor) {
-    return transition(bookingId, 'CANCELLED', actor, 'BOOKING_CANCELLED',
+    var booking = transition(bookingId, 'CANCELLED', actor, 'BOOKING_CANCELLED',
       { cancelled_at: new Date().toISOString() }, true, 'CANCELLATION_REQUESTED', true);
+    notify(booking, 'CANCELLATION_APPROVED', function () { EmailService.sendCancellationApproved(booking); });
+    return booking;
   }
   function rejectCancellation(bookingId, actor) {
-    return transition(bookingId, 'CONFIRMED', actor, 'CANCELLATION_REJECTED', { cancelled_at: '' }, false);
+    var booking = transition(bookingId, 'CONFIRMED', actor, 'CANCELLATION_REJECTED', { cancelled_at: '' }, false);
+    notify(booking, 'CANCELLATION_REJECTED', function () { EmailService.sendCancellationRejected(booking); });
+    return booking;
   }
   function markCompleted(bookingId, actor) {
     return transition(bookingId, 'COMPLETED', actor, 'COMPLETED',

@@ -179,9 +179,11 @@ function loadBackend(opts, files) {
   const sentEmails = [];
   sandbox._sentEmails = sentEmails;
   sandbox.EmailService = {
-    sendBookingConfirmation: function (r) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'confirm', record: r }); },
-    sendCancellationEmail: function (r) { sentEmails.push({ type: 'cancel', record: r }); },
-    sendRescheduleEmail: function (a, b) { sentEmails.push({ type: 'reschedule', from: a, to: b }); },
+    sendConfirmation: function (r, token) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'confirm', record: r, token: token }); },
+    sendCancellationRequested: function (r) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'cancel-requested', record: r }); },
+    sendCancellationApproved: function (r) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'cancel-approved', record: r }); },
+    sendCancellationRejected: function (r) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'cancel-rejected', record: r }); },
+    sendRescheduled: function (r, previous) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'reschedule', record: r, previous: previous }); },
   };
 
   // --- ContentService stub (captures JSON payloads) ---

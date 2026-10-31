@@ -112,6 +112,9 @@ r.test('business rescheduling changes the interval in place without changing dur
   assert.strictEqual(stored.manage_token_hash, before.manage_token_hash);
   assert.strictEqual(stored.status, 'CONFIRMED');
   assert.strictEqual(stored.start_at, nextStart);
+  assert.strictEqual(ctx._sentEmails.slice(-1)[0].type, 'reschedule');
+  assert.strictEqual(ctx._sentEmails.slice(-1)[0].previous.start_at, before.start_at);
+  assert.deepStrictEqual(ctx._operationOrder.slice(-3), ['flush', 'unlock', 'email']);
   assert.strictEqual(eventBefore._deleted, false);
   assert.strictEqual(eventBefore.start.toISOString(), nextStart);
   assert.deepStrictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1).map(e => e.event_type), ['BOOKING_RESCHEDULED']);
@@ -156,6 +159,8 @@ r.test('cancellation approval removes the linked event and releases reserved cap
   assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 0);
   assert.strictEqual(ctx.BookingStore.getById(bookingId).cancelled_at !== '', true);
   assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1)[0].event_type, 'BOOKING_CANCELLED');
+  assert.strictEqual(ctx._sentEmails.slice(-1)[0].type, 'cancel-approved');
+  assert.deepStrictEqual(ctx._operationOrder.slice(-3), ['flush', 'unlock', 'email']);
 });
 
 r.test('retrying an idempotent cancellation retries Calendar cleanup after partial Sheet rollback', () => {
@@ -185,6 +190,23 @@ r.test('rejecting a cancellation request returns it to confirmed and retains cap
   assert.strictEqual(updated.status, 'CONFIRMED');
   assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 1);
   assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1)[0].event_type, 'CANCELLATION_REJECTED');
+  assert.strictEqual(ctx._sentEmails.slice(-1)[0].type, 'cancel-rejected');
+  assert.deepStrictEqual(ctx._operationOrder.slice(-3), ['flush', 'unlock', 'email']);
+});
+
+r.test('lifecycle delivery failures do not roll back durable cancellation or reschedule state', () => {
+  const ctx = makeCtx({ emailFailure: true });
+  const created = makeBooking(ctx);
+  const before = ctx.BookingStore.getById(created.booking.booking_id);
+  const nextStart = new Date(new Date(before.start_at).getTime() + 3600000).toISOString();
+  const moved = ctx.BookingService.reschedule(before.booking_id, { start_at: nextStart }, 'owner@example.com');
+  assert.strictEqual(ctx.BookingStore.getById(before.booking_id).start_at, nextStart);
+  assert.strictEqual(moved.start_at, nextStart);
+  ctx.SheetStore.setSetting('customer_cancellation_enabled', 'true');
+  ctx.BookingService.requestCancellation(created.manage_token);
+  const cancelled = ctx.BookingService.approveCancellation(before.booking_id, 'owner@example.com');
+  assert.strictEqual(cancelled.status, 'CANCELLED');
+  assert.strictEqual(ctx.BookingStore.getById(before.booking_id).status, 'CANCELLED');
 });
 
 r.test('completed and no-show are rejected before start and idempotent after start', () => {

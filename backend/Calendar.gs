@@ -77,8 +77,8 @@ var CalendarGateway = (function () {
 })();
 
 /**
- * Temporary legacy facade for Code.gs/Reconcile.gs until their migration.
- * AvailabilityService does not call this calendar-derived availability path.
+ * Legacy calendar-derived availability facade. M1 AvailabilityService does
+ * not call this path; the Sheet-backed service is the booking authority.
  *
  * CalendarService — availability detection and slot generation.
  * Finds availability windows by title pattern match on the designated calendar,
