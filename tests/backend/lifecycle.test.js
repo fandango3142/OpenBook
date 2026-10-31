@@ -11,6 +11,13 @@ r.test('a management token returns only its own booking and invalid tokens fail 
   const ctx = makeCtx();
   const first = makeBooking(ctx, { email: 'first@example.com' });
   const second = makeBooking(ctx, { email: 'second@example.com', start_at: new Date(new Date(cmd().start_at).getTime() + 3600000).toISOString() });
+  const defaultActions = ctx.BookingService.getManaged(first.manage_token).actions;
+  assert.strictEqual(defaultActions.can_request_cancellation, false);
+  assert.strictEqual(defaultActions.can_request_reschedule, false);
+  assert.throws(() => ctx.BookingService.requestReschedule(first.manage_token, '2026-11-03T03:30:00.000Z'),
+    e => e.domainCode === 'INVALID_STATE');
+  ctx.SheetStore.setSetting('customer_cancellation_enabled', 'true');
+  ctx.SheetStore.setSetting('customer_rescheduling_enabled', 'true');
   assert.deepStrictEqual(JSON.parse(JSON.stringify(ctx.BookingService.getManaged(first.manage_token))), JSON.parse(JSON.stringify({
     booking: ctx.BookingService.publicBooking(ctx.BookingStore.getById(first.booking.booking_id)),
     actions: { can_request_cancellation: true, can_request_reschedule: true },

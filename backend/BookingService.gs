@@ -28,7 +28,7 @@ var BookingService = (function () {
   }
   function settingEnabled(key) {
     var value = SheetStore.getSetting(key);
-    if (value === '' || value === null || value === undefined) return true;
+    if (value === '' || value === null || value === undefined) return false;
     return value === true || String(value).toLowerCase() === 'true' || String(value) === '1';
   }
   function managedRecord(token) {
