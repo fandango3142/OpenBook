@@ -74,6 +74,19 @@ r.test('reschedule request metadata is allowlisted and original interval remains
   assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 1);
 });
 
+r.test('cancellation cannot report success while a reschedule request is pending', () => {
+  const ctx = makeCtx();
+  ctx.SheetStore.setSetting('customer_rescheduling_enabled', 'true');
+  ctx.SheetStore.setSetting('customer_cancellation_enabled', 'true');
+  const created = makeBooking(ctx);
+  const requestedStart = new Date(new Date(created.booking.start_at).getTime() + 3600000).toISOString();
+  ctx.BookingService.requestReschedule(created.manage_token, requestedStart);
+  assert.throws(() => ctx.BookingService.requestCancellation(created.manage_token),
+    e => e.domainCode === 'INVALID_STATE');
+  assert.strictEqual(ctx.BookingStore.getById(created.booking.booking_id).status, 'RESCHEDULE_REQUESTED');
+  assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').filter(e => e.event_type === 'CANCELLATION_REQUESTED').length, 0);
+});
+
 r.test('public management actions are routed through POST', () => {
   const ctx = makeCtx();
   const created = makeBooking(ctx);

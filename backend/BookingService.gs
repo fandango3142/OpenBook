@@ -127,7 +127,7 @@ var BookingService = (function () {
       var booking = hash ? BookingStore.getByTokenHash(hash) : null;
       if (!booking) throw error('INVALID_TOKEN');
       if (booking.status !== 'CONFIRMED') {
-        if (['CANCELLATION_REQUESTED', 'RESCHEDULE_REQUESTED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'].indexOf(booking.status) !== -1) {
+        if (booking.status === 'CANCELLATION_REQUESTED') {
           return { booking: booking, changed: false };
         }
         throw error('INVALID_STATE');
