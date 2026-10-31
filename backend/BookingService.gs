@@ -26,6 +26,43 @@ var BookingService = (function () {
       service_name: record.service_name_snapshot, start_at: record.start_at, end_at: record.end_at,
       quantity: record.quantity, status: record.status };
   }
+  function settingEnabled(key) {
+    var value = SheetStore.getSetting(key);
+    if (value === '' || value === null || value === undefined) return true;
+    return value === true || String(value).toLowerCase() === 'true' || String(value) === '1';
+  }
+  function managedRecord(token) {
+    if (typeof token !== 'string' || !token || token.length > 512) throw error('INVALID_TOKEN');
+    var record = BookingStore.getByTokenHash(TokenService.hash(token));
+    if (!record) throw error('INVALID_TOKEN');
+    return record;
+  }
+  function managedActions(record) {
+    var confirmed = record.status === 'CONFIRMED';
+    return {
+      can_request_cancellation: confirmed && settingEnabled('customer_cancellation_enabled'),
+      can_request_reschedule: confirmed && settingEnabled('customer_rescheduling_enabled'),
+    };
+  }
+  function publicManaged(record) {
+    return { booking: publicBooking(record), actions: managedActions(record) };
+  }
+  function persistRequest(booking, status, metadata) {
+    var updated = { status: status, updated_at: new Date().toISOString() };
+    try {
+      if (!SheetStore.updateById('Bookings', 'booking_id', booking.booking_id, updated)) throw error('INTERNAL_ERROR');
+      BookingStore.appendEvent({ event_id: Domain.newId('EVT'), booking_id: booking.booking_id,
+        event_type: status, actor: 'CUSTOMER', timestamp: new Date().toISOString(),
+        metadata_json: JSON.stringify(metadata || {}) });
+      return Object.assign({}, booking, updated);
+    } catch (writeError) {
+      try {
+        SheetStore.updateById('Bookings', 'booking_id', booking.booking_id,
+          { status: booking.status, updated_at: booking.updated_at });
+      } catch (rollbackError) { Logger.log('BOOKING_REQUEST_ROLLBACK_FAILED'); }
+      throw writeError;
+    }
+  }
   function event(bookingId, type, actor) {
     return { event_id: Domain.newId('EVT'), booking_id: bookingId, event_type: type,
       actor: actor, timestamp: new Date().toISOString(), metadata_json: '{}' };
@@ -79,5 +116,49 @@ var BookingService = (function () {
     } catch (deliveryError) { Logger.log('BOOKING_CONFIRMATION_DELIVERY_FAILED'); }
     return { booking: publicBooking(committed.booking), manage_token: committed.token };
   }
-  return { create: create, error: error, publicBooking: publicBooking };
+  function getManaged(token) {
+    Schema.ensureCurrent();
+    return publicManaged(managedRecord(token));
+  }
+  function requestCancellation(token) {
+    Schema.ensureCurrent();
+    var hash = typeof token === 'string' && token.length <= 512 ? TokenService.hash(token) : '';
+    var result = LockGateway.withLock(10000, function () {
+      var booking = hash ? BookingStore.getByTokenHash(hash) : null;
+      if (!booking) throw error('INVALID_TOKEN');
+      if (booking.status !== 'CONFIRMED') {
+        if (['CANCELLATION_REQUESTED', 'RESCHEDULE_REQUESTED', 'CANCELLED', 'COMPLETED', 'NO_SHOW'].indexOf(booking.status) !== -1) {
+          return { booking: booking, changed: false };
+        }
+        throw error('INVALID_STATE');
+      }
+      if (!settingEnabled('customer_cancellation_enabled') ||
+          !Domain.canTransition(booking.status, 'CANCELLATION_REQUESTED', booking, new Date())) throw error('INVALID_STATE');
+      var requested = persistRequest(booking, 'CANCELLATION_REQUESTED');
+      return { booking: requested, changed: true };
+    });
+    if (result.changed && EmailService.sendCancellationRequested) {
+      try { EmailService.sendCancellationRequested(result.booking); }
+      catch (sendError) { Logger.log('CANCELLATION_REQUEST_EMAIL_FAILED'); }
+    }
+    return { booking: publicBooking(result.booking) };
+  }
+  function requestReschedule(token, requestedStart) {
+    Schema.ensureCurrent();
+    var hash = typeof token === 'string' && token.length <= 512 ? TokenService.hash(token) : '';
+    var start;
+    try { start = TimeService.instant(requestedStart).toISOString(); }
+    catch (e) { throw error('VALIDATION_ERROR'); }
+    return LockGateway.withLock(10000, function () {
+      var booking = hash ? BookingStore.getByTokenHash(hash) : null;
+      if (!booking) throw error('INVALID_TOKEN');
+      if (booking.status === 'RESCHEDULE_REQUESTED') return { booking: publicBooking(booking) };
+      if (!settingEnabled('customer_rescheduling_enabled') || booking.status !== 'CONFIRMED' ||
+          !Domain.canTransition(booking.status, 'RESCHEDULE_REQUESTED', booking, new Date())) throw error('INVALID_STATE');
+      var requested = persistRequest(booking, 'RESCHEDULE_REQUESTED', { requested_start_at: start });
+      return { booking: publicBooking(requested) };
+    });
+  }
+  return { create: create, getManaged: getManaged, requestCancellation: requestCancellation,
+    requestReschedule: requestReschedule, error: error, publicBooking: publicBooking };
 })();

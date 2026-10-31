@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <title>Manage booking</title>
+  <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+  <main class="container" aria-live="polite">
+    <p id="manage-loading" role="status">Loading booking…</p>
+    <div id="manage-error" role="alert" hidden></div>
+    <section id="manage-content" class="confirmation-box"></section>
+  </main>
+  <script src="lib/js-yaml.min.js"></script>
+  <script src="js/config-loader.js"></script>
+  <script src="js/api-client.js"></script>
+  <script src="js/manage.js"></script>
+  <script>ManagePage.init();</script>
+</body>
+</html>

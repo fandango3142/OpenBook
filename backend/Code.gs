@@ -18,6 +18,9 @@ function routePublic(data) {
       case 'listServices': return handleListServices(data);
       case 'getAvailability': return handleGetAvailability(data);
       case 'createBooking': return handleCreateBooking(data);
+      case 'getManagedBooking': return handleGetManagedBooking(data);
+      case 'requestCancellation': return handleRequestCancellation(data);
+      case 'requestReschedule': return handleRequestReschedule(data);
       default: return jsonResponse({ success: false, error: 'VALIDATION_ERROR' });
     }
   } catch (err) { return publicError(err); }
@@ -60,6 +63,29 @@ function handleCreateBooking(data) {
     return jsonResponse({ success: true, booking: result.booking, manage_token: result.manage_token });
   } catch (err) { return publicError(err); }
 }
+function handleGetManagedBooking(data) {
+  try {
+    if (typeof data.token !== 'string') throw BookingService.error('INVALID_TOKEN');
+    var managed = BookingService.getManaged(data.token);
+    return jsonResponse({ success: true, booking: managed.booking, actions: managed.actions });
+  } catch (err) { return publicError(err); }
+}
+function handleRequestCancellation(data) {
+  try {
+    if (typeof data.token !== 'string') throw BookingService.error('INVALID_TOKEN');
+    var result = BookingService.requestCancellation(data.token);
+    return jsonResponse({ success: true, booking: result.booking });
+  } catch (err) { return publicError(err); }
+}
+function handleRequestReschedule(data) {
+  try {
+    if (typeof data.token !== 'string' || typeof data.requested_start_at !== 'string') {
+      throw BookingService.error('VALIDATION_ERROR');
+    }
+    var result = BookingService.requestReschedule(data.token, data.requested_start_at);
+    return jsonResponse({ success: true, booking: result.booking });
+  } catch (err) { return publicError(err); }
+}
 function rateBump(cache, key, limit, windowSec) {
   var n = parseInt(cache.get(key) || '0', 10);
   if (n >= limit) return false;
@@ -69,11 +95,13 @@ function rateBump(cache, key, limit, windowSec) {
 function rateLimitOk(action, data) {
   var cache = CacheService.getScriptCache();
   var cid = String(data.clientId || 'anon').slice(0,64);
-  if (action === 'createBooking') {
+  if (['createBooking', 'requestCancellation', 'requestReschedule'].indexOf(action) !== -1) {
     if (!rateBump(cache, 'rlw_' + cid, parseInt(Config.get('RATE_LIMIT_WRITE_PER_CLIENT'),10) || 15, 60)) return false;
-    var customer = data.customer && typeof data.customer === 'object' ? data.customer : data;
-    var email = typeof customer.email === 'string' ? customer.email.trim().toLowerCase().slice(0,254) : '';
-    if (email && !rateBump(cache, 'rlwe_' + TokenService.hash(email), parseInt(Config.get('RATE_LIMIT_WRITE_PER_EMAIL'),10) || 10, 3600)) return false;
+    if (action === 'createBooking') {
+      var customer = data.customer && typeof data.customer === 'object' ? data.customer : data;
+      var email = typeof customer.email === 'string' ? customer.email.trim().toLowerCase().slice(0,254) : '';
+      if (email && !rateBump(cache, 'rlwe_' + TokenService.hash(email), parseInt(Config.get('RATE_LIMIT_WRITE_PER_EMAIL'),10) || 10, 3600)) return false;
+    }
     return rateBump(cache, 'rlw_global', parseInt(Config.get('RATE_LIMIT_WRITE_GLOBAL'),10) || 300, 60);
   }
   return rateBump(cache, 'rlr_' + cid, parseInt(Config.get('RATE_LIMIT_READ_PER_CLIENT'),10) || 120, 60);
