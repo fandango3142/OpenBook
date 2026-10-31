@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 520" role="img" aria-labelledby="title desc">
+  <title id="title">Configure Avery Studio's sample consultation</title>
+  <desc id="desc">Illustrative booking service and weekly availability form for a fictional 45-minute coaching consultation.</desc>
+  <rect width="720" height="520" rx="24" fill="#e8ede4"/>
+  <text x="36" y="44" font-family="Arial,sans-serif" font-size="12" font-weight="700" letter-spacing="2" fill="#245744">ILLUSTRATIVE · SAMPLE BUSINESS CONFIGURATION</text>
+  <rect x="36" y="66" width="648" height="400" rx="18" fill="#fff" stroke="#cbd5cb"/>
+  <rect x="36" y="66" width="648" height="56" rx="18" fill="#245744"/><path d="M36 104v18h648v-18" fill="#245744"/>
+  <text x="64" y="101" font-family="Arial,sans-serif" font-size="17" font-weight="700" fill="#fff">Avery Studio · service settings</text>
+  <rect x="64" y="146" width="592" height="76" rx="10" fill="#f7f9f6" stroke="#d6dfd7"/>
+  <text x="84" y="171" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#56645c">SERVICE NAME</text>
+  <text x="84" y="201" font-family="Arial,sans-serif" font-size="18" font-weight="700" fill="#20352d">Coaching consultation</text>
+  <rect x="64" y="238" width="278" height="88" rx="10" fill="#f7f9f6" stroke="#d6dfd7"/>
+  <text x="84" y="264" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#56645c">SESSION LENGTH</text><text x="84" y="304" font-family="Georgia,serif" font-size="28" fill="#245744">45 minutes</text>
+  <rect x="358" y="238" width="298" height="88" rx="10" fill="#f7f9f6" stroke="#d6dfd7"/>
+  <text x="378" y="264" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#56645c">WEEKLY AVAILABILITY</text>
+  <rect x="378" y="279" width="69" height="28" rx="14" fill="#dfe8e1"/><text x="412" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#245744">TUE</text>
+  <rect x="455" y="279" width="69" height="28" rx="14" fill="#dfe8e1"/><text x="489" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#245744">THU</text>
+  <rect x="532" y="279" width="94" height="28" rx="14" fill="#dfe8e1"/><text x="579" y="298" text-anchor="middle" font-family="Arial,sans-serif" font-size="11" font-weight="700" fill="#245744">10–4</text>
+  <rect x="64" y="342" width="592" height="94" rx="10" fill="#e6ede7"/>
+  <circle cx="90" cy="389" r="14" fill="#245744"/><path d="m83 389 5 5 9-10" fill="none" stroke="#fff" stroke-width="2.5" stroke-linecap="round"/>
+  <text x="118" y="380" font-family="Arial,sans-serif" font-size="14" font-weight="700" fill="#20352d">Review access and verify test settings</text>
+  <text x="118" y="405" font-family="Arial,sans-serif" font-size="12" fill="#56645c">Use your own disposable IDs and the exact fixture from the guide.</text>
+  <text x="360" y="493" text-anchor="middle" font-family="Arial,sans-serif" font-size="12" font-weight="700" fill="#56645c">Fictional sample service · settings shown are illustrative, not fixture values</text>
+</svg>

@@ -1,0 +1,88 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Follow OpenBook's current setup guide using disposable Google Sheets and Calendar resources.">
+  <title>Getting started — OpenBook</title>
+  <link rel="icon" href="assets/openbook-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/carousels.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header band-light">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html" aria-label="OpenBook home"><img src="assets/openbook-mark.svg" width="36" height="36" alt="">OpenBook<span class="brand-dot">.</span></a>
+      <nav class="site-nav" aria-label="Main navigation"><a href="index.html#how-it-works">How it works</a><a href="index.html#examples">Examples</a><a href="setup.html" aria-current="page">Getting started</a></nav>
+    </div>
+  </header>
+  <main id="main" class="setup-main">
+    <section class="setup-intro band-dark" aria-labelledby="setup-title">
+      <div class="wrap setup-content">
+      <p class="eyebrow">A CLEAR LOOK AT THE CURRENT SETUP</p>
+      <h1 id="setup-title">Getting started,<br>with eyes <em>open.</em></h1>
+      <p class="setup-lead">Follow Avery Studio, a coaching practice setting up 45-minute consultations. We’ll use that familiar booking example to make each technical setup step easier to picture.</p>
+      <aside class="setup-warning" aria-labelledby="test-scope">
+        <h2 id="test-scope">Setup guide · disposable resources only</h2>
+        <p>This guide describes a technical setup using disposable test resources. It requires Google Apps Script; there is no verified non-technical production installation path. Keep customer records and production calendars out of this setup.</p>
+        <p>If you need help deciding how to proceed, <a href="https://github.com/fandango3142/OpenBook/issues/new">ask for setup help on GitHub</a>. Issues are public: do not post customer details, account data, or credentials.</p>
+      </aside>
+      <fieldset class="setup-level" data-setup-level hidden>
+        <legend>How comfortable are you with technical setup?</legend>
+        <div class="level-options"><button type="button" data-level-choice="technical" aria-pressed="true">Comfortable with technical steps</button><button type="button" data-level-choice="plain" aria-pressed="false">Explain it in plain language</button></div>
+        <p data-level-summary aria-live="polite">You’ll see the technical steps and exact settings for this disposable setup.</p>
+      </fieldset>
+      </div>
+    </section>
+
+    <section class="setup-steps-band band-light" aria-label="Step-by-step setup guide">
+      <div class="carousel setup-carousel wrap" data-carousel="setup" data-setup-wizard data-level="technical" role="region" aria-roledescription="carousel" aria-label="OpenBook setup guide steps">
+        <ol class="setup-steps">
+          <li class="setup-step" id="prepare" data-slide="setup" data-step="1">
+            <div class="setup-stage"><div class="setup-copy"><p class="setup-example-label">AVERY STUDIO · COACHING</p><span class="step-number" aria-hidden="true">01</span><h2>Prepare a safe practice space</h2>
+              <p data-level-copy="plain">Avery creates a fresh Sheet and two test Calendars: one for new consultations, one to check for conflicts. They keep real client details and the studio’s live Calendar out of the practice setup.</p>
+              <p data-level-copy="technical" hidden>Create a disposable Sheet and two dedicated test Calendars. The configuration guide specifies different business and Calendar timezones to exercise time conversion.</p>
+              <details data-technical-details><summary>Detailed actions and reference</summary><p>Create a new disposable Sheet and two dedicated test Calendars: one for booking events and one for checking conflicts. Keep real customer records and production calendars out of this setup.</p><p>The configuration guide specifies different business and Calendar timezones to exercise time conversion. Record the test IDs and environment as directed.</p><a class="text-link" href="https://github.com/fandango3142/OpenBook/blob/master/docs/configuration/sheets.md">Follow the disposable Sheet configuration guide</a></details>
+            </div><figure class="setup-visual"><img class="setup-step-visual" src="assets/setup-prepare.svg" width="720" height="520" alt="Illustration of Avery Studio's disposable test Sheet and separate booking and conflict Calendars."></figure>
+            </div>
+          </li>
+          <li class="setup-step" id="script" data-slide="setup" data-step="2">
+            <div class="setup-stage"><div class="setup-copy"><p class="setup-example-label">AVERY STUDIO · COACHING</p><span class="step-number" aria-hidden="true">02</span><h2>Connect the booking engine</h2>
+              <p data-level-copy="plain">Avery links a new Apps Script project to the practice Sheet and adds OpenBook’s code. That lets the test booking page read the example service and check the studio’s test Calendars.</p>
+              <p data-level-copy="technical" hidden>Bind a Google Apps Script project to the disposable Sheet, copy the backend files, enable Calendar Advanced Service v3, and set the Script Properties for the test Sheet and optional static test frontend.</p>
+              <details data-technical-details><summary>Detailed actions and reference</summary><p>Bind a new Google Apps Script project to the disposable Sheet and copy the current <a href="https://github.com/fandango3142/OpenBook/tree/master/backend">backend source files</a> into it. Enable Calendar Advanced Service v3 in Apps Script and its associated Google Cloud project.</p><p>Set the Script Properties <code>SPREADSHEET_ID</code> to the test Sheet ID and <code>GITHUB_PAGES_URL</code> to your separate static test frontend URL, or leave the latter blank for backend-only testing. Keep the script timezone at UTC as documented.</p></details>
+            </div><figure class="setup-visual"><img class="setup-step-visual" src="assets/setup-script.svg" width="720" height="520" alt="Illustration of an Apps Script project connected to the Avery Studio practice Sheet and Calendar service."></figure>
+            </div>
+          </li>
+          <li class="setup-step" id="configure" data-slide="setup" data-step="3">
+            <div class="setup-stage"><div class="setup-copy"><p class="setup-example-label">AVERY STUDIO · COACHING</p><span class="step-number" aria-hidden="true">03</span><h2>Set up the example service</h2>
+              <p data-level-copy="plain">Avery checks the requested Google access, then adds the service hours and availability for practice consultations. Every setting points to the disposable resources.</p>
+              <p data-level-copy="technical" hidden>Review source code and the actual Google permission prompt, run migrations, configure the documented fixture, enable smoke-test mode, and verify every configured ID is disposable.</p>
+              <details data-technical-details><summary>Detailed actions and reference</summary><p>Review the source and permissions before authorizing. The script uses Sheets to access booking data, checks and manages events on configured Calendars, and sends booking emails. The <a href="https://github.com/fandango3142/OpenBook/blob/master/backend/appsscript.json">Apps Script manifest</a> does not list explicit OAuth scopes; review the actual Google permission prompt for the access requested by your project.</p><p>Run <code>runMigrations()</code> and verify the seven generated tabs and <code>Settings.schema_version = 1</code>. Populate the Settings, Service, recurring availability, and exception fixture exactly as the configuration guide describes. Set <code>smoke_test_mode</code> to <code>true</code> and check every configured ID belongs to your disposable assets.</p><p>The technical guide contains the current tables and values; use those rather than copying an illustrative business example from the homepage.</p></details>
+            </div><figure class="setup-visual"><img class="setup-step-visual" src="assets/setup-configure.svg" width="720" height="520" alt="Illustration of Avery Studio's 45-minute practice coaching consultation and available hours marked as test data."></figure>
+            </div>
+          </li>
+          <li class="setup-step" id="verify" data-slide="setup" data-step="4">
+            <div class="setup-stage"><div class="setup-copy"><p class="setup-example-label">AVERY STUDIO · COACHING</p><span class="step-number" aria-hidden="true">04</span><h2>Try and verify a booking</h2>
+              <p data-level-copy="plain">Avery opens the disposable booking page, chooses a 45-minute coaching time, and checks the confirmation. They verify the matching Sheet row, Calendar event, and email, then remove the test data.</p>
+              <p data-level-copy="technical" hidden>Deploy a test web app against disposable assets only, confirm its execution and access settings, run the transactional/public lifecycle walkthrough, then remove the deployment and test resources.</p>
+              <details data-technical-details><summary>Detailed actions and reference</summary><p><strong>Test only:</strong> run the Calendar and email configuration checks in the smoke-test guide, then deploy a new test web-app version using only the disposable Sheet and Calendars. The manifest runs the web app as the deploying account and allows anonymous access; review this deployment setting before publishing the test.</p><p>Configure a separate local or test copy of the booking frontend with that test web-app endpoint. The endpoint connects the frontend to Apps Script; it is not the page you send customers. The GitHub Pages product-site URL is also different from an owner's customer booking URL.</p><p>Follow the smoke-test guide to run the transactional helper and the public booking and lifecycle walkthrough. The helper suppresses booking emails; use only a test inbox you control for message-delivery checks. Verify its generated records and events were cleaned up. Remove the test deployment and disposable assets when finished.</p><a class="text-link" href="https://github.com/fandango3142/OpenBook/blob/master/docs/testing/milestone-1-smoke-test.md">Follow the test walkthrough on GitHub</a></details>
+            </div><figure class="setup-visual"><img class="setup-step-visual" src="assets/setup-verify.svg" width="720" height="520" alt="Illustration of an Avery Studio test booking confirmed on the practice booking page, Sheet, Calendar, and email."></figure>
+            </div>
+          </li>
+        </ol>
+        <div class="carousel-controls setup-wizard-footer" hidden>
+          <button type="button" class="setup-wizard-nav" data-previous aria-label="Previous step"><span aria-hidden="true">←</span> Previous</button>
+          <nav class="setup-step-list" data-step-list aria-label="Setup progress"><ol><li><button type="button" data-step-link="1"><span>01</span><small>Prepare assets</small></button></li><li><button type="button" data-step-link="2"><span>02</span><small>Connect script</small></button></li><li><button type="button" data-step-link="3"><span>03</span><small>Set up booking</small></button></li><li><button type="button" data-step-link="4"><span>04</span><small>Try a booking</small></button></li></ol></nav>
+          <button type="button" class="setup-wizard-nav" data-next aria-label="Next step">Next <span aria-hidden="true">→</span></button>
+        </div>
+      </div>
+    </section>
+
+    <section class="setup-behavior band-dark" aria-labelledby="behavior-title"><div class="wrap"><p class="eyebrow">WHAT YOU ARE VERIFYING</p><h2 id="behavior-title">One booking, across your tools.</h2><p>A new submitted booking becomes <code>CONFIRMED</code>, creates a blocking event on the business Calendar, and sends a confirmation email with booking details and a management link. Google Sheets is the authoritative record for bookings and capacity. Later cancellation and reschedule requests go to operator review.</p></div></section>
+    <section class="setup-help band-light"><div class="wrap"><aside class="help-note setup-help-card" aria-labelledby="setup-help-title"><p class="eyebrow">PERSONAL SETUP SUPPORT</p><h2 id="setup-help-title">Need a hand getting started?</h2><p>Want OpenBook configured around your business? Request a custom build, or ask a setup question on GitHub.</p><p class="setup-help-actions"><a class="button" href="mailto:ryandsouza4@gmail.com">Request a custom build</a><a class="text-link" href="https://github.com/fandango3142/OpenBook/issues/new">Ask on GitHub Issues</a></p><p class="fine-print">GitHub Issues are public. Keep customer details, credentials, and account data out of your message.</p></aside></div></section>
+  </main>
+  <footer class="site-footer band-light"><div class="wrap site-footer-inner"><a class="brand" href="index.html"><img src="assets/openbook-mark.svg" width="28" height="28" alt="">OpenBook<span class="brand-dot">.</span></a><p>A little more space for the work you do.</p><nav aria-label="Footer navigation"><a href="https://github.com/fandango3142/OpenBook">GitHub</a><a href="https://github.com/fandango3142/OpenBook/issues/new">Help</a></nav></div><div class="wrap site-footer-legal"><p>© 2026 <a href="https://ryanbuilds.in">Ryan D'Souza</a>. All rights reserved.</p></div></footer>
+</body>
+</html>

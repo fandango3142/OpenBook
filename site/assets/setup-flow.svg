@@ -1,0 +1,32 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="720" height="600" viewBox="0 0 720 600" role="img" aria-labelledby="title description">
+  <title id="title">OpenBook setup guide — four stages</title>
+  <desc id="description">A diagram, not a screenshot. Prepare disposable Sheet and Calendars, bind Apps Script and copy backend files, configure and authorize the project, then deploy a test web app and verify with the frontend and test walkthrough.</desc>
+  <rect width="720" height="600" rx="8" fill="#e9ede2"/>
+  <g font-family="system-ui, sans-serif" fill="#20352d">
+    <text x="36" y="44" font-size="15" font-weight="600">OpenBook setup guide</text><text x="36" y="67" font-size="12" fill="#56645c">Diagram · disposable assets only</text>
+    <g transform="translate(28 90)">
+      <rect width="320" height="230" rx="5" fill="#fffef9"/>
+      <circle cx="32" cy="32" r="15" fill="#245744"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="14">1</text>
+      <g transform="translate(124 25)" stroke="#245744" stroke-width="2" fill="none"><rect width="54" height="58" rx="3"/><path d="M0 17h54M18 17v41M36 17v41M0 31h54M0 45h54"/><rect x="68" y="12" width="38" height="36" rx="3"/><path d="M68 24h38M78 6v12M96 6v12"/></g>
+      <text x="24" y="124" font-size="17" font-weight="600">Prepare test assets</text><text x="24" y="153" font-size="14" fill="#56645c"><tspan x="24">One disposable Sheet.</tspan><tspan x="24" dy="23">Two dedicated test Calendars.</tspan><tspan x="24" dy="23">No customer data.</tspan></text>
+    </g>
+    <g transform="translate(372 90)">
+      <rect width="320" height="230" rx="5" fill="#fffef9"/>
+      <circle cx="32" cy="32" r="15" fill="#245744"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="14">2</text>
+      <g transform="translate(130 25)" stroke="#245744" stroke-width="2" fill="none"><rect width="82" height="58" rx="3"/><path d="M0 13h82M27 27l-9 9 9 9M55 27l9 9-9 9M45 24l-8 24"/></g>
+      <text x="24" y="124" font-size="17" font-weight="600">Connect Apps Script</text><text x="24" y="153" font-size="14" fill="#56645c"><tspan x="24">Bind a project to the Sheet.</tspan><tspan x="24" dy="23">Copy the current backend.</tspan><tspan x="24" dy="23">Enable Calendar service.</tspan></text>
+    </g>
+    <g transform="translate(28 344)">
+      <rect width="320" height="230" rx="5" fill="#fffef9"/>
+      <circle cx="32" cy="32" r="15" fill="#245744"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="14">3</text>
+      <g transform="translate(145 24)" stroke="#245744" stroke-width="2" fill="none"><path d="M0 0h48v60H0zM10 16h28M10 30h28M10 44h15"/><circle cx="47" cy="47" r="15" fill="#fffef9"/><path d="M39 47l5 5 10-11"/></g>
+      <text x="24" y="124" font-size="17" font-weight="600">Configure &amp; authorize</text><text x="24" y="153" font-size="14" fill="#56645c"><tspan x="24">Review source and permissions.</tspan><tspan x="24" dy="23">Run migrations.</tspan><tspan x="24" dy="23">Add the disposable test fixture.</tspan></text>
+    </g>
+    <g transform="translate(372 344)">
+      <rect width="320" height="230" rx="5" fill="#fffef9"/>
+      <circle cx="32" cy="32" r="15" fill="#245744"/><text x="32" y="37" text-anchor="middle" fill="#fff" font-size="14">4</text>
+      <g transform="translate(130 26)" stroke="#245744" stroke-width="2" fill="none"><rect width="82" height="55" rx="3"/><path d="M0 12h82M32 32l7 7 14-15M30 66h22M41 55v11"/></g>
+      <text x="24" y="124" font-size="17" font-weight="600">Deploy &amp; verify the test</text><text x="24" y="153" font-size="14" fill="#56645c"><tspan x="24">Deploy a test web app.</tspan><tspan x="24" dy="23">Connect a test frontend.</tspan><tspan x="24" dy="23">Run smoke checks and clean up.</tspan></text>
+    </g>
+  </g>
+</svg>

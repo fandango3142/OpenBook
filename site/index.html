@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="OpenBook is open-source appointment booking software built around your Google Sheets, Calendar, and email.">
+  <title>OpenBook — Make room for your work.</title>
+  <link rel="icon" href="assets/openbook-mark.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="assets/site.css">
+  <script src="assets/carousels.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to content</a>
+  <header class="site-header band-light">
+    <div class="wrap header-inner">
+      <a class="brand" href="index.html" aria-label="OpenBook home"><img src="assets/openbook-mark.svg" width="36" height="36" alt="">OpenBook<span class="brand-dot">.</span></a>
+      <nav class="site-nav" aria-label="Main navigation">
+        <a href="#how-it-works">How it works</a>
+        <a href="#examples">Examples</a>
+        <a href="setup.html">Getting started <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a>
+      </nav>
+    </div>
+  </header>
+  <main id="main">
+    <section class="hero band-dark" aria-labelledby="hero-title">
+      <div class="wrap hero-inner">
+      <div class="hero-copy">
+        <p class="eyebrow"><span class="small-mark" aria-hidden="true">✳</span> Your time. Your tools. Open source.</p>
+        <h1 id="hero-title">Make room<br>for your <em>work.</em></h1>
+        <p class="hero-description">A straightforward way for customers to book time with you, built with Google Apps Script around Sheets, Calendar, and email.</p>
+        <div class="actions">
+          <a class="button" href="setup.html">Read the setup guide <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a>
+          <a class="text-link" href="mailto:ryandsouza4@gmail.com">Need custom help? <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a>
+        </div>
+      </div>
+      <figure class="booking-illustration parallax">
+        <div class="sample-window">
+          <div class="sample-top"><span class="sample-monogram" aria-hidden="true">a.</span><span>Avery Studio<small>Coaching &amp; consulting</small></span><span class="sample-label">EXAMPLE</span></div>
+          <p class="sample-kicker">A LITTLE TIME TO THINK TOGETHER</p>
+          <p class="sample-title">Find your next step.</p>
+          <p class="sample-detail">One-to-one session · 45 minutes</p>
+          <div class="sample-date"><span>Wednesday</span><strong>18 November 2026</strong></div>
+          <div class="sample-times" aria-label="Illustrative time slots"><span>10:00 am</span><span class="selected-time">11:00 am <span aria-hidden="true">✓</span></span><span>2:00 pm</span></div>
+          <div class="sample-confirmed"><span class="check" aria-hidden="true">✓</span><div><strong>A little space, booked.</strong><span>Confirmation sent by email</span></div></div>
+        </div>
+      </figure>
+      </div>
+    </section>
+    <div class="principles band-light" aria-label="OpenBook foundations"><div class="wrap principles-inner"><span>Open source, under the <a href="https://github.com/fandango3142/OpenBook/blob/master/LICENSE">MIT License</a></span><span>Bookings in your Google account</span><span>A simple customer booking page</span></div></div>
+
+    <section class="section band-light" id="how-it-works" aria-labelledby="how-title">
+      <div class="wrap">
+      <div class="section-heading"><p class="eyebrow">FROM AN OPEN SLOT TO A CONFIRMED BOOKING</p><h2 id="how-title">Less back-and-forth.<br>A clearer calendar.</h2><p>Your customers choose an available time. OpenBook checks capacity and calendar conflicts, then records the booking.</p></div>
+      <div class="carousel" data-carousel="how-it-works" data-autoplay="true" data-dot-label="step" role="region" aria-roledescription="carousel" aria-label="How OpenBook works">
+        <ol class="flow-grid">
+          <li class="flow-card" data-slide="how-it-works"><div class="flow-copy"><span class="step-number">01</span><h3>A customer chooses a time</h3><p>Your booking page shows the service and available slots for your business.</p></div><img class="flow-visual" src="assets/booking-choice.svg" alt="Illustration of a customer choosing an open appointment time"></li>
+          <li class="flow-card" data-slide="how-it-works"><div class="flow-copy"><span class="step-number">02</span><h3>The booking is confirmed</h3><p>New bookings are confirmed immediately. Google Sheets holds the booking and capacity records; Google Calendar receives a confirmed event that blocks the business's time.</p></div><img class="flow-visual" src="assets/booking-record.svg" alt="Illustration of a booking recorded in Sheets and added to a calendar"></li>
+          <li class="flow-card" data-slide="how-it-works"><div class="flow-copy"><span class="step-number">03</span><h3>The details arrive by email</h3><p>The customer receives an email confirmation with booking details and a management link. Later cancellation and reschedule requests are reviewed by the operator.</p></div><img class="flow-visual" src="assets/booking-email.svg" alt="Illustration of a customer receiving a booking confirmation email"></li>
+        </ol>
+        <div class="carousel-controls" hidden>
+          <button class="carousel-arrow" type="button" data-previous aria-label="Previous step"><img src="assets/arrow-left.svg" alt="" aria-hidden="true"></button>
+          <div class="carousel-dots" data-dots role="group" aria-label="Choose a step"></div>
+          <button class="carousel-arrow" type="button" data-pause aria-label="Pause automatic slide show" aria-pressed="false"><img src="assets/pause.svg" alt="" aria-hidden="true"></button>
+          <button class="carousel-arrow" type="button" data-next aria-label="Next step"><img src="assets/arrow-right.svg" alt="" aria-hidden="true"></button>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <section class="data-section band-dark" aria-labelledby="data-title">
+      <div class="wrap data-layout"><div><p class="eyebrow">FAMILIAR TOOLS, CLEAR RESPONSIBILITIES</p><h2 id="data-title">Your bookings have<br>a home.</h2><p>OpenBook does not centrally host your customer booking data. A deployment runs using Google services and the owner's Google account.</p></div><dl class="data-list" aria-label="Google services used by OpenBook"><div><dt><img class="service-icon" src="assets/service-spreadsheet.svg" alt=""> Google Sheets</dt><dd>The authoritative record of bookings and capacity.</dd></div><div><dt><img class="service-icon" src="assets/service-calendar.svg" alt=""> Google Calendar</dt><dd>Checked for conflicts and updated with confirmed business events.</dd></div><div><dt><img class="service-icon" src="assets/service-email.svg" alt=""> Email</dt><dd>Booking details and a management link sent to the customer.</dd></div></dl></div>
+    </section>
+
+    <section class="section band-light" id="examples" aria-labelledby="examples-title">
+      <div class="wrap">
+      <div class="section-heading"><p class="eyebrow">DIFFERENT WORK, THE SAME NEED FOR TIME</p><h2 id="examples-title">What could you make room for?</h2><p>Illustrative examples to help you think about your business. These are examples, not official templates or ready-to-use demo data.</p></div>
+      <div class="carousel example-carousel" data-carousel="examples" data-dot-label="example" role="region" aria-roledescription="carousel" aria-label="Illustrative business examples">
+        <div class="example-grid">
+          <article data-slide="examples"><img src="assets/photos/coaching.jpg" width="960" height="640" alt="Two people meeting in a bright office" loading="lazy"><span class="example-number">01 / CONVERSATIONS</span><h3>Coaching &amp; consulting</h3><p>One-to-one coaching sessions, portfolio reviews, and business consultations.</p></article>
+          <article data-slide="examples"><img src="assets/photos/tutoring.jpg" width="960" height="640" alt="A tutor helping a student with a lesson" loading="lazy"><span class="example-number">02 / LEARNING</span><h3>Tutoring &amp; lessons</h3><p>Maths tutoring, music lessons, and language practice.</p></article>
+          <article data-slide="examples"><img src="assets/photos/personal-care.jpg" width="960" height="640" alt="A hairstylist giving a customer a haircut" loading="lazy"><span class="example-number">03 / EVERYDAY CARE</span><h3>Personal care</h3><p>Haircuts, styling appointments, and grooming sessions.</p></article>
+          <article data-slide="examples"><img src="assets/photos/wellness.jpg" width="960" height="640" alt="A yoga teacher guiding a student in a pose" loading="lazy"><span class="example-number">04 / MOVEMENT</span><h3>Wellness &amp; movement</h3><p>Non-clinical sessions such as yoga instruction and personal training.</p></article>
+          <article data-slide="examples"><img src="assets/photos/home-services.jpg" width="960" height="640" alt="A carpenter working carefully in a workshop" loading="lazy"><span class="example-number">05 / PRACTICAL HELP</span><h3>Home services</h3><p>Scheduled repair visits, cleaning slots, and home organising appointments.</p></article>
+          <article data-slide="examples"><img src="assets/photos/classes.jpg" width="960" height="640" alt="People taking part in a pottery class" loading="lazy"><span class="example-number">06 / SHARED TIME</span><h3>Small classes &amp; workshops</h3><p>Capacity-based sessions for a pottery class or a small creative workshop.</p></article>
+        </div>
+        <div class="carousel-controls" hidden>
+          <button class="carousel-arrow" type="button" data-previous aria-label="Previous example"><img src="assets/arrow-left.svg" alt="" aria-hidden="true"></button>
+          <div class="carousel-dots" data-dots role="group" aria-label="Choose an example"></div>
+          <button class="carousel-arrow" type="button" data-next aria-label="Next example"><img src="assets/arrow-right.svg" alt="" aria-hidden="true"></button>
+        </div>
+      </div>
+      </div>
+    </section>
+
+    <section class="setup-callout band-dark" aria-labelledby="setup-title">
+      <div class="wrap setup-callout-inner">
+      <div><p class="eyebrow">START WITH THE CURRENT GUIDE</p><h2 id="setup-title">See what setup involves.</h2><p>OpenBook's current M1 instructions cover disposable test assets and require technical steps. There is no verified non-technical production setup procedure. Read the guide before deciding how to proceed.</p><a class="button" href="setup.html">Open the setup guide <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a></div>
+      <aside class="help-note"><h3>A hand with your setup?</h3><p>Ask setup questions in GitHub Issues, or contact us about a custom build.</p><a class="text-link" href="https://github.com/fandango3142/OpenBook/issues/new">Get setup help <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a><a class="text-link" href="mailto:ryandsouza4@gmail.com">Request a custom build <img class="external-icon" src="assets/external-link.svg" alt="" aria-hidden="true"></a><p class="fine-print">GitHub Issues are public. Do not post customer details, account data, or credentials.</p></aside>
+      </div>
+    </section>
+
+  </main>
+  <footer class="site-footer band-light"><div class="wrap site-footer-inner"><a class="brand" href="index.html"><img src="assets/openbook-mark.svg" width="28" height="28" alt="">OpenBook<span class="brand-dot">.</span></a><p>A little more space for the work you do.</p><nav aria-label="Footer navigation"><a href="https://github.com/fandango3142/OpenBook">GitHub</a><a href="https://github.com/fandango3142/OpenBook/issues/new">Help</a></nav></div><div class="wrap site-footer-legal"><p>Google quotas, availability, terms, and any charges are governed by Google and the owner's account and region. They are outside OpenBook's control.</p><p>© 2026 <a href="https://ryanbuilds.in">Ryan D'Souza</a>. All rights reserved.</p></div></footer>
+</body>
+</html>

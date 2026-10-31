@@ -1,0 +1,5 @@
+The external-link, arrow, play/pause, spreadsheet, calendar, and email pictograms are based on
+Lucide icons (https://github.com/lucide-icons/lucide), licensed under the ISC
+License: https://github.com/lucide-icons/lucide/blob/main/LICENSE
+
+The service pictograms are generic symbols, not official Google product marks.

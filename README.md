@@ -8,6 +8,7 @@
 An open-source booking engine built with Google Apps Script, Sheets, Calendar, and email.</p>
 
 <p align="center">
+  <a href="https://fandango3142.github.io/OpenBook/site/">OpenBook landing page</a> ·
   <a href="#release-overview">Product overview</a> ·
   <a href="#setup-and-test-status">Setup and test docs</a> ·
   <a href="https://github.com/fandango3142/OpenBook/issues/new">Get help</a>
@@ -71,4 +72,3 @@ To import the Apps Script project, configure its Script Properties and Sheet tab
 ## License and attribution
 
 OpenBook is distributed under the [MIT License](LICENSE). This repository began from [ContextLab/scheduler](https://github.com/ContextLab/scheduler); see [UPSTREAM.md](UPSTREAM.md) for the pinned revision and attribution details.
-
