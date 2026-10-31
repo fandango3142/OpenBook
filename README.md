@@ -19,7 +19,7 @@ An open-source booking engine built with Google Apps Script, Sheets, Calendar, a
 
 OpenBook gives independent businesses a straightforward way to accept appointment bookings. Customers choose an available service and time, then receive an email confirmation with a management link. Operators can add bookings and review later cancellation or reschedule requests.
 
-This repository describes the current M1 implementation. Automated checks cover the backend, frontend, and public product site. A live Apps Script deployment and disposable-account smoke test are separate operator-run acceptance steps; passing local tests alone does not verify Google permissions, Calendar configuration, or deployment.
+This repository describes the current M1 implementation. Automated backend and frontend checks are available. A live Apps Script deployment and disposable-account smoke test are separate operator-run acceptance steps; passing local tests alone does not verify Google permissions, Calendar configuration, or deployment.
 
 > **Setup status:** The current setup instructions are for technical testing with disposable Google assets. There is not yet a verified non-technical production setup procedure.
 
@@ -43,7 +43,7 @@ The current setup procedure is intended for developers validating the project, n
 - [Booking-engine design](docs/superpowers/specs/2026-10-02-booking-engine-design.md)
 - [M1 implementation plan](docs/superpowers/plans/2026-10-02-booking-engine-m1.md)
 
-The customer booking application is deployed separately from the GitHub Pages product website. The generated-ID booking smoke helper refuses to run unless `smoke_test_mode` is explicitly enabled in the test spreadsheet.
+The generated-ID booking smoke helper refuses to run unless `smoke_test_mode` is explicitly enabled in the test spreadsheet.
 
 ## Run the checks
 
@@ -54,15 +54,13 @@ npm ci --prefix tests/frontend
 npm test
 ```
 
-The root test command runs backend Node tests, frontend Jest tests, and static product-site checks. Run the frontend suite by itself with:
+The root test command runs backend Node tests followed by frontend Jest tests. Run the frontend suite by itself with:
 
 ```bash
 npm --prefix tests/frontend test -- --runInBand --cacheDirectory node_modules/.cache/jest
 ```
 
 To import the Apps Script project, configure its Script Properties and Sheet tabs using the [disposable configuration guide](docs/configuration/sheets.md). The Apps Script project timezone is pinned to UTC; business availability and customer-facing times use the Sheet’s `business_timezone` value.
-
-The GitHub Pages workflow validates pull requests and pushes to `master`; after successful checks, it publishes only `site/` from `master`. It does not deploy the customer booking application.
 
 ## Known limitations and service terms
 
