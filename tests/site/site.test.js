@@ -27,6 +27,7 @@ test('landing page has a separate path that preserves the booking page at the ro
   const bookingPage = fs.readFileSync(path.resolve(__dirname, '../../index.html'), 'utf8');
   const home = readPage('index.html');
   const workflow = fs.readFileSync(path.resolve(__dirname, '../../.github/workflows/pages.yml'), 'utf8');
+  const previewSettings = path.resolve(__dirname, '../../config/settings.preview.yaml');
   assert.match(readme, /https:\/\/fandango3142\.github\.io\/OpenBook\/site\//);
   assert.match(bookingPage, /<title>Book a time · OpenBook<\/title>/);
   assert.match(home, /<title>OpenBook — Make room for your work\.<\/title>/);
@@ -35,6 +36,7 @@ test('landing page has a separate path that preserves the booking page at the ro
   assert.match(workflow, /cp config\/settings\.preview\.yaml dist\/config\/settings\.yaml/);
   assert.match(workflow, /upload-pages-artifact@[\s\S]*?path:\s*dist/);
   assert.doesNotMatch(workflow, /path:\s*site\s*$/m);
+  assert.ok(fs.existsSync(previewSettings), 'Pages should publish the existing disposable booking preview configuration');
   assert.ok(fs.existsSync(path.join(site, 'setup.html')));
 });
 
