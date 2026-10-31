@@ -1,82 +1,25 @@
-/**
- * Config Loader — fetches and parses YAML configuration files.
- * Loads meeting-types.yaml, locations.yaml, and settings.yaml from config/.
- */
-
+/** Loads neutral site settings; booking services always come from the API. */
 const ConfigLoader = (function () {
   let _config = null;
 
-  async function loadYaml(path) {
-    const response = await fetch(path);
-    if (!response.ok) {
-      throw new Error(`Failed to load ${path}: ${response.status} ${response.statusText}`);
-    }
-    const text = await response.text();
-    return jsyaml.load(text);
-  }
-
   async function loadAll() {
     if (_config) return _config;
-
-    const [meetingTypesData, locationsData, settingsData] = await Promise.all([
-      loadYaml('./config/meeting-types.yaml'),
-      loadYaml('./config/locations.yaml'),
-      loadYaml('./config/settings.yaml'),
-    ]);
-
-    const meetingTypes = validateMeetingTypes(meetingTypesData);
-    const locations = validateLocations(locationsData);
-    const settings = settingsData;
-
-    _config = { meetingTypes, locations, settings };
+    const response = await fetch('./config/settings.yaml');
+    if (!response.ok) throw new Error(`Failed to load site settings: ${response.status}`);
+    const settings = jsyaml.load(await response.text()) || {};
+    if (typeof ApiClient === 'undefined') throw new Error('Booking API is unavailable');
+    ApiClient.init(settings.apps_script_url || '');
+    const result = await ApiClient.listServices();
+    const services = (result.services || []).filter((service) => service && service.service_id && service.name &&
+      Number.isInteger(Number(service.duration_minutes)) && Number(service.duration_minutes) > 0 &&
+      Number.isInteger(Number(service.capacity)) && Number(service.capacity) > 0);
+    if (!services.length) throw new Error('No bookable services are currently available');
+    _config = { settings, services };
     return _config;
   }
 
-  function validateMeetingTypes(data) {
-    if (!data || !Array.isArray(data.meeting_types)) {
-      console.warn('meeting-types.yaml: missing or invalid meeting_types array');
-      return [];
-    }
-    return data.meeting_types.filter(function (mt) {
-      var valid = mt.id && mt.name && mt.description;
-      if (!valid) {
-        console.warn('meeting-types.yaml: skipping invalid entry:', mt);
-      }
-      return valid;
-    });
-  }
-
-  function validateLocations(data) {
-    if (!data || !Array.isArray(data.locations)) {
-      console.warn('locations.yaml: missing or invalid locations array');
-      return [];
-    }
-    return data.locations.filter(function (loc) {
-      var valid = loc.id && loc.label && loc.value;
-      if (!valid) {
-        console.warn('locations.yaml: skipping invalid entry:', loc);
-      }
-      return valid;
-    });
-  }
-
-  function getConfig() {
-    return _config;
-  }
-
-  function resetConfig() {
-    _config = null;
-  }
-
-  return {
-    loadAll: loadAll,
-    getConfig: getConfig,
-    resetConfig: resetConfig,
-    validateMeetingTypes: validateMeetingTypes,
-    validateLocations: validateLocations,
-  };
+  function getConfig() { return _config; }
+  function resetConfig() { _config = null; }
+  return { loadAll, getConfig, resetConfig };
 })();
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = ConfigLoader;
-}
+if (typeof module !== 'undefined' && module.exports) module.exports = ConfigLoader;

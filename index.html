@@ -1,119 +1,81 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Schedule a Meeting</title>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="color-scheme" content="light">
+  <title>Book a time · OpenBook</title>
   <link rel="stylesheet" href="css/styles.css">
   <script src="lib/js-yaml.min.js"></script>
-  <script src="lib/fullcalendar.min.js"></script>
 </head>
 <body>
-  <div class="container">
+  <main class="container">
     <header class="header">
-      <h1>Schedule a Meeting</h1>
-      <div class="timezone-selector" id="timezone-selector">
-        <label for="timezone-select">Timezone:</label>
-        <select id="timezone-select" aria-label="Select your timezone"></select>
-      </div>
+      <p class="eyebrow">OpenBook</p>
+      <h1>Book a time</h1>
+      <p>Choose a service and a time that works for you.</p>
     </header>
+    <nav class="step-indicator" aria-label="Booking progress">
+      <span class="step active" data-step="1">1 · Service</span>
+      <span class="step" data-step="2">2 · Time</span>
+      <span class="step" data-step="3">3 · Your details</span>
+      <span class="step" data-step="4">4 · Confirm</span>
+      <span class="step" data-step="5">5 · Done</span>
+    </nav>
 
-    <div class="steps">
-      <div class="step-indicator" id="step-indicator">
-        <span class="step active" data-step="1">1. Meeting Type</span>
-        <span class="step" data-step="2">2. Duration</span>
-        <span class="step" data-step="3">3. Date &amp; Time</span>
-        <span class="step" data-step="4">4. Your Details</span>
-        <span class="step" data-step="5">5. Confirmation</span>
-      </div>
-    </div>
-
-    <!-- Step 1: Meeting Type Selection -->
-    <section id="step-1" class="step-content active" aria-label="Select meeting type">
-      <h2>Select a Meeting Type</h2>
-      <div id="meeting-types" class="meeting-types-grid"></div>
+    <section id="step-1" class="step-content active" aria-labelledby="services-heading">
+      <h2 id="services-heading">Choose a service</h2>
+      <div id="services" class="service-list" aria-live="polite"></div>
     </section>
-
-    <!-- Step 2: Duration Selection -->
-    <section id="step-2" class="step-content" aria-label="Select meeting duration">
-      <h2>Choose a Duration</h2>
-      <p id="selected-type-info" class="selected-info"></p>
-      <button class="btn btn-back" id="back-to-step-1" aria-label="Go back to meeting type selection">&larr; Back</button>
-      <div id="duration-options" class="duration-grid"></div>
-    </section>
-
-    <!-- Step 3: Calendar / Slot Selection -->
-    <section id="step-3" class="step-content" aria-label="Select date and time">
-      <h2>Choose a Time</h2>
-      <p id="selected-duration-info" class="selected-info"></p>
-      <button class="btn btn-back" id="back-to-step-2" aria-label="Go back to duration selection">&larr; Back</button>
+    <section id="step-2" class="step-content" aria-labelledby="time-heading">
+      <h2 id="time-heading">Choose a time</h2>
+      <p id="selected-service-info" class="selected-info"></p>
+      <button type="button" class="btn btn-back" id="back-to-services">← Services</button>
       <div id="calendar-container" class="calendar-container"></div>
     </section>
-
-    <!-- Step 4: Booking Form -->
-    <section id="step-4" class="step-content" aria-label="Enter your details">
-      <h2>Your Details</h2>
+    <section id="step-3" class="step-content" aria-labelledby="details-heading">
+      <h2 id="details-heading">Your details</h2>
       <p id="selected-slot-info" class="selected-info"></p>
-      <div id="instruction-banner" class="instruction-banner"></div>
-      <button class="btn btn-back" id="back-to-step-3" aria-label="Go back to time selection">&larr; Back</button>
+      <button type="button" class="btn btn-back" id="back-to-slots">← Times</button>
       <form id="booking-form" novalidate>
-        <!-- Honeypot: hidden from real users; only bots fill it. Kept off-screen
-             rather than display:none so naive bots still see it. -->
-        <div class="hp-field" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px;width:1px;height:1px;overflow:hidden;">
+        <div class="hp-field" aria-hidden="true">
           <label for="hp">Website</label>
           <input type="text" id="hp" name="website" tabindex="-1" autocomplete="off">
         </div>
-        <div class="form-row">
-          <div class="form-group">
-            <label for="first-name">First Name <span class="required">*</span></label>
-            <input type="text" id="first-name" name="firstName" required aria-required="true">
-            <span class="error-message" id="first-name-error"></span>
-          </div>
-          <div class="form-group">
-            <label for="last-name">Last Name <span class="required">*</span></label>
-            <input type="text" id="last-name" name="lastName" required aria-required="true">
-            <span class="error-message" id="last-name-error"></span>
-          </div>
+        <div class="form-group">
+          <label for="name">Name <span aria-hidden="true">*</span></label>
+          <input type="text" id="name" name="name" autocomplete="name" required aria-describedby="name-error">
+          <span class="error-message" id="name-error" aria-live="polite"></span>
         </div>
         <div class="form-group">
-          <label for="email">Email Address <span class="required">*</span></label>
-          <input type="email" id="email" name="email" required aria-required="true">
-          <span class="error-message" id="email-error"></span>
+          <label for="email">Email <span aria-hidden="true">*</span></label>
+          <input type="email" id="email" name="email" autocomplete="email" required aria-describedby="email-error">
+          <span class="error-message" id="email-error" aria-live="polite"></span>
         </div>
         <div class="form-group">
-          <label for="format">Meeting Format <span class="required">*</span></label>
-          <select id="format" name="format" required aria-required="true">
-            <option value="">Select format...</option>
-          </select>
-          <span class="error-message" id="format-error"></span>
+          <label for="phone">Phone <span class="optional">(optional)</span></label>
+          <input type="tel" id="phone" name="phone" autocomplete="tel">
         </div>
         <div class="form-group">
-          <label for="purpose">Meeting Purpose</label>
-          <textarea id="purpose" name="purpose" rows="3" placeholder="What would you like to discuss?"></textarea>
+          <label for="quantity">Quantity</label>
+          <input type="number" id="quantity" name="quantity" min="1" max="1" value="1" inputmode="numeric" aria-describedby="quantity-error">
+          <span class="error-message" id="quantity-error" aria-live="polite"></span>
         </div>
-        <div class="form-group">
-          <label for="notes">Other notes, links, or information</label>
-          <textarea id="notes" name="notes" rows="3" placeholder="Any links, documents, or context you'd like me to review before we meet?"></textarea>
-        </div>
-        <button type="submit" class="btn btn-primary" id="submit-booking">Confirm Booking</button>
+        <button type="submit" class="btn btn-primary">Review booking</button>
       </form>
     </section>
-
-    <!-- Step 5: Confirmation -->
-    <section id="step-5" class="step-content" aria-label="Booking confirmation">
-      <div id="confirmation-content"></div>
+    <section id="step-4" class="step-content" aria-labelledby="review-heading">
+      <h2 id="review-heading">Confirm your booking</h2>
+      <p id="review-summary" class="selected-info"></p>
+      <button type="button" class="btn btn-back" id="back-to-details">← Edit details</button>
+      <button type="button" class="btn btn-primary" id="place-booking">Confirm booking</button>
     </section>
+    <section id="step-5" class="step-content" aria-labelledby="confirmation-content"></section>
 
-    <!-- Loading overlay -->
-    <div id="loading" class="loading-overlay" aria-hidden="true">
-      <div class="spinner"></div>
-      <p>Processing...</p>
-    </div>
-
-    <!-- Error display -->
-    <div id="error-banner" class="error-banner" role="alert" aria-live="polite"></div>
-  </div>
-
+    <div id="loading" class="loading-overlay" aria-hidden="true"><div class="spinner"></div><p>Confirming…</p></div>
+    <div id="error-banner" class="error-banner" role="alert" aria-live="assertive"></div>
+    <footer><span>Powered by OpenBook · Open source booking software</span></footer>
+  </main>
   <script src="js/config-loader.js"></script>
   <script src="js/timezone.js"></script>
   <script src="js/api-client.js"></script>

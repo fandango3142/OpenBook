@@ -4,7 +4,7 @@
   "private": true,
   "description": "Frontend tests for booking scheduler",
   "scripts": {
-    "test": "jest",
+    "test": "jest --cacheDirectory node_modules/.cache/jest",
     "test:watch": "jest --watch",
     "test:coverage": "jest --coverage"
   },

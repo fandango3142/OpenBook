@@ -1,441 +1,147 @@
-/**
- * App — main application orchestrator.
- * Manages 5-step navigation, loading states, error display, and wires up the booking flow.
- * Steps: 1. Meeting Type → 2. Duration → 3. Date & Time → 4. Your Details → 5. Confirmation
- */
-
+/** Public booking flow: service -> slot -> contact -> confirm -> success. */
 var App = (function () {
-  var _currentStep = 1;
-  var _selectedType = null;
-  var _selectedDuration = null;
-  var _selectedSlot = null;
-  var _errorTimeout = null;
-  var _submitting = false;
-
-  var DURATION_OPTIONS = [
-    { minutes: 15, label: '15', unit: 'min' },
-    { minutes: 30, label: '30', unit: 'min' },
-    { minutes: 45, label: '45', unit: 'min' },
-    { minutes: 60, label: '1', unit: 'hr' },
-  ];
+  let _currentStep = 1;
+  let _selectedService = null;
+  let _selectedSlot = null;
+  let _pendingFormData = null;
+  let _submitting = false;
+  let _errorTimeout = null;
 
   function init() {
-    ConfigLoader.loadAll()
-      .then(function (config) {
-        // Initialize timezone
-        var defaultTz = config.settings.default_timezone || 'America/New_York';
-        TimezoneUtil.detect(defaultTz);
-        populateTimezoneSelector();
-
-        // Initialize API client
-        ApiClient.init(config.settings.apps_script_url);
-
-        // Prefetch slots for the full booking window so data is ready when user
-        // reaches Step 3. One API call covers all navigable weeks.
-        var minHours = config.settings.min_notice_hours || 12;
-        var maxDays = config.settings.max_advance_days || 90;
-        var prefetchStart = new Date(Date.now() + minHours * 60 * 60 * 1000);
-        var prefetchEnd = new Date(Date.now() + maxDays * 24 * 60 * 60 * 1000);
-        ApiClient.prefetchSlots(prefetchStart.toISOString(), prefetchEnd.toISOString());
-
-        // Render meeting types
-        renderMeetingTypes(config.meetingTypes);
-
-        // Set up back buttons
-        document.getElementById('back-to-step-1').addEventListener('click', function () {
-          goToStep(1);
-        });
-        document.getElementById('back-to-step-2').addEventListener('click', function () {
-          _selectedDuration = null;
-          goToStep(2);
-        });
-        document.getElementById('back-to-step-3').addEventListener('click', function () {
-          goToStep(3);
-        });
-
-        // Set up booking form
-        BookingForm.init(config.locations);
-      })
-      .catch(function (err) {
-        showError('Failed to load configuration: ' + err.message);
-      });
+    ConfigLoader.loadAll().then(function (config) {
+      renderServices(config.services || []);
+      BookingForm.init(prepareConfirmation);
+      document.getElementById('back-to-services').addEventListener('click', function () { goToStep(1); });
+      document.getElementById('back-to-slots').addEventListener('click', function () { goToStep(2); });
+      const edit = document.getElementById('back-to-details');
+      if (edit) edit.addEventListener('click', function () { goToStep(3); });
+      const confirm = document.getElementById('place-booking');
+      if (confirm) confirm.addEventListener('click', function () { submitBooking(_pendingFormData); });
+    }).catch(function (error) { showError(error.message || 'Could not load booking services.'); });
   }
-
-  function populateTimezoneSelector() {
-    var select = document.getElementById('timezone-select');
-    var timezones = TimezoneUtil.getCommonTimezones();
-    var currentTz = TimezoneUtil.getTimezone();
-
-    timezones.forEach(function (tz) {
-      var option = document.createElement('option');
-      option.value = tz.value;
-      option.textContent = tz.label;
-      if (tz.value === currentTz) {
-        option.selected = true;
-      }
-      select.appendChild(option);
-    });
-
-    select.addEventListener('change', function () {
-      TimezoneUtil.setTimezone(select.value);
-      // Re-render calendar if on step 3
-      if (_currentStep === 3 && _selectedDuration) {
-        CalendarUI.refresh();
-      }
-    });
-  }
-
-  function renderMeetingTypes(meetingTypes) {
-    var container = document.getElementById('meeting-types');
+  function renderServices(services) {
+    const container = document.getElementById('services');
     container.textContent = '';
-
-    meetingTypes.forEach(function (type) {
-      var card = document.createElement('div');
-      card.className = 'meeting-type-card';
-      card.tabIndex = 0;
-      card.setAttribute('role', 'button');
-      card.setAttribute('aria-label', type.name);
-
-      var h3 = document.createElement('h3');
-      h3.textContent = type.name;
-      card.appendChild(h3);
-
-      var desc = document.createElement('div');
-      desc.className = 'description';
-      desc.textContent = type.description;
-      card.appendChild(desc);
-
-      card.addEventListener('click', function () {
-        selectMeetingType(type);
-      });
-      card.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectMeetingType(type);
-        }
-      });
-
+    services.forEach(function (service) {
+      const card = document.createElement('button'); card.type = 'button'; card.className = 'service-card';
+      const title = document.createElement('strong'); title.textContent = service.name; card.appendChild(title);
+      const detail = document.createElement('span');
+      detail.textContent = (service.description ? service.description + ' · ' : '') + service.duration_minutes + ' minutes';
+      card.appendChild(detail);
+      card.addEventListener('click', function () { selectService(service); });
       container.appendChild(card);
     });
+    if (!services.length) showError('No booking services are currently available.');
   }
-
-  function selectMeetingType(type) {
-    _selectedType = type;
-    document.getElementById('selected-type-info').textContent = type.name;
-    renderDurationOptions();
+  function selectService(service) {
+    _selectedService = service; _selectedSlot = null;
+    document.getElementById('selected-service-info').textContent = service.name + ' · ' + service.duration_minutes + ' minutes';
+    CalendarUI.init(service, onSlotSelected);
     goToStep(2);
   }
-
-  function renderDurationOptions() {
-    var container = document.getElementById('duration-options');
-    container.textContent = '';
-
-    // Filter durations by type's allowed_durations (if specified)
-    var allowed = _selectedType && _selectedType.allowed_durations;
-    var options = DURATION_OPTIONS.filter(function (opt) {
-      return !allowed || allowed.indexOf(opt.minutes) !== -1;
-    });
-
-    options.forEach(function (opt) {
-      var card = document.createElement('div');
-      card.className = 'duration-card';
-      card.tabIndex = 0;
-      card.setAttribute('role', 'button');
-      card.setAttribute('aria-label', opt.label + ' ' + opt.unit);
-
-      var value = document.createElement('div');
-      value.className = 'duration-value';
-      value.textContent = opt.label;
-      card.appendChild(value);
-
-      var label = document.createElement('div');
-      label.className = 'duration-label';
-      label.textContent = opt.unit;
-      card.appendChild(label);
-
-      card.addEventListener('click', function () {
-        selectDuration(opt.minutes);
-      });
-      card.addEventListener('keydown', function (e) {
-        if (e.key === 'Enter' || e.key === ' ') {
-          e.preventDefault();
-          selectDuration(opt.minutes);
-        }
-      });
-
-      container.appendChild(card);
-    });
-  }
-
-  function selectDuration(minutes) {
-    _selectedDuration = minutes;
-    var durationLabel = minutes === 60 ? '1 hr' : minutes + ' min';
-    document.getElementById('selected-duration-info').textContent =
-      _selectedType.name + ' \u2014 ' + durationLabel;
-    goToStep(3);
-    CalendarUI.init(minutes, onSlotSelected);
-  }
-
   function onSlotSelected(slot) {
     _selectedSlot = slot;
-    var durationLabel = _selectedDuration === 60 ? '1 hr' : _selectedDuration + ' min';
-    document.getElementById('selected-slot-info').textContent =
-      _selectedType.name + ' (' + durationLabel + ') \u2014 ' +
-      TimezoneUtil.formatDateTime(slot.start) + ' (' +
-      TimezoneUtil.getTimezoneAbbreviation() + ')';
-
-    // Filter location dropdown based on type's allowed_locations
-    BookingForm.updateLocations(_selectedType.allowed_locations || null);
-
-    // Show or hide instruction banner
-    var banner = document.getElementById('instruction-banner');
-    if (_selectedType.instructions) {
-      banner.textContent = '';
-      var icon = document.createElement('span');
-      icon.className = 'instruction-icon';
-      icon.textContent = '\u2139';
-      banner.appendChild(icon);
-      banner.appendChild(document.createTextNode(_selectedType.instructions));
-      banner.classList.add('visible');
-    } else {
-      banner.textContent = '';
-      banner.classList.remove('visible');
+    const settings = (ConfigLoader.getConfig() || {}).settings || {};
+    const zone = settings.business_timezone || 'UTC';
+    const time = new Intl.DateTimeFormat(undefined, { timeZone: zone, weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(slot.start_at));
+    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let label = _selectedService.name + ' · ' + time;
+    if (browserZone && browserZone !== zone) {
+      label += ' · Your time: ' + new Intl.DateTimeFormat(undefined, { timeZone: browserZone, hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(slot.start_at));
     }
-
+    document.getElementById('selected-slot-info').textContent = label;
+    BookingForm.setCapacity(slot.remaining_capacity || 1);
+    goToStep(3);
+  }
+  function prepareConfirmation(data) {
+    _pendingFormData = data;
+    document.getElementById('review-summary').textContent = _selectedService.name + ' · ' + _selectedService.duration_minutes + ' minutes · ' + data.name + ' · ' + data.email + ' · ' + data.quantity + ' place(s)';
     goToStep(4);
   }
-
   function goToStep(step) {
-    // Hide all steps
-    for (var i = 1; i <= 5; i++) {
-      var section = document.getElementById('step-' + i);
-      section.classList.remove('active');
+    for (let i = 1; i <= 5; i++) {
+      const section = document.getElementById('step-' + i);
+      if (section) section.classList.toggle('active', i === step);
     }
-
-    // Show target step
-    document.getElementById('step-' + step).classList.add('active');
-
-    // Update step indicator
-    var indicators = document.querySelectorAll('.step-indicator .step');
-    indicators.forEach(function (el) {
-      var s = parseInt(el.dataset.step, 10);
-      el.classList.remove('active', 'completed');
-      if (s === step) {
-        el.classList.add('active');
-      } else if (s < step) {
-        el.classList.add('completed');
-      }
+    document.querySelectorAll('.step-indicator .step').forEach(function (el) {
+      const current = Number(el.dataset.step);
+      el.classList.toggle('active', current === step);
+      el.classList.toggle('completed', current < step);
     });
-
     _currentStep = step;
     hideError();
   }
-
-  function showLoading() {
-    document.getElementById('loading').classList.add('visible');
-  }
-
-  function hideLoading() {
-    document.getElementById('loading').classList.remove('visible');
-  }
-
+  function showLoading() { const el = document.getElementById('loading'); if (el) el.classList.add('visible'); }
+  function hideLoading() { const el = document.getElementById('loading'); if (el) el.classList.remove('visible'); }
   function showError(message, autoHideMs) {
-    var banner = document.getElementById('error-banner');
+    const banner = document.getElementById('error-banner');
+    if (!banner) return;
+    if (_errorTimeout) clearTimeout(_errorTimeout);
     banner.textContent = message;
     banner.classList.add('visible');
-
-    if (_errorTimeout) {
-      clearTimeout(_errorTimeout);
-      _errorTimeout = null;
-    }
-
-    if (autoHideMs) {
-      _errorTimeout = setTimeout(function () {
-        hideError();
-      }, autoHideMs);
-    }
+    if (autoHideMs) _errorTimeout = setTimeout(hideError, autoHideMs);
   }
-
   function hideError() {
-    var banner = document.getElementById('error-banner');
-    banner.classList.remove('visible');
-    banner.textContent = '';
-    if (_errorTimeout) {
-      clearTimeout(_errorTimeout);
-      _errorTimeout = null;
-    }
+    if (_errorTimeout) { clearTimeout(_errorTimeout); _errorTimeout = null; }
+    const banner = document.getElementById('error-banner');
+    if (banner) { banner.classList.remove('visible'); banner.textContent = ''; }
   }
-
   function submitBooking(formData) {
-    // Re-entry guard: a double-click or slow-network re-click must not fire a
-    // second createBooking request for the same slot.
     if (_submitting) return;
-
-    if (!_selectedType || !_selectedDuration || !_selectedSlot) {
-      showError('Please select a meeting type, duration, and time slot first.');
-      return;
-    }
-
-    var config = ConfigLoader.getConfig();
-    var location = config.locations.find(function (loc) {
-      return loc.id === formData.format;
-    });
-
-    // Apply location_override if the meeting type specifies one
-    var locationValue = location ? location.value : formData.format;
-    if (_selectedType.location_override) {
-      locationValue = _selectedType.location_override;
-    }
-
-    var bookingData = {
-      meetingTypeId: _selectedType.id,
-      meetingTypeName: _selectedType.name,
-      eventLabel: _selectedType.event_label || '',
-      duration: _selectedDuration,
-      start: _selectedSlot.start,
-      end: _selectedSlot.end,
-      firstName: formData.firstName,
-      lastName: formData.lastName,
-      email: formData.email,
-      format: formData.format,
-      location: locationValue,
-      purpose: formData.purpose || '',
-      notes: formData.notes || '',
+    if (!_selectedService || !_selectedSlot || !formData) { showError('Choose a service and time before confirming.'); return; }
+    const request = {
+      service_id: _selectedService.service_id,
+      start_at: _selectedSlot.start_at,
+      quantity: Number(formData.quantity),
+      customer: { name: formData.name, email: formData.email, phone: formData.phone || '' },
       hp: formData.hp || '',
     };
-
     _submitting = true;
-    var submitBtn = document.getElementById('submit-booking');
-    if (submitBtn) submitBtn.disabled = true;
+    const button = document.getElementById('place-booking');
+    if (button) button.disabled = true;
     showLoading();
-
-    ApiClient.createBooking(bookingData)
-      .then(function (result) {
-        hideLoading();
-        _submitting = false;
-        // A booking changed availability; drop the stale page-load snapshot so
-        // any later slot fetch reflects the new state.
+    ApiClient.createBooking(request).then(function (result) {
+      ApiClient.invalidatePrefetch();
+      renderSuccess(result.booking, formData);
+      goToStep(5);
+    }).catch(function (error) {
+      const stale = ['SLOT_UNAVAILABLE', 'INSUFFICIENT_CAPACITY'].indexOf(error.code) !== -1;
+      if (stale) {
         ApiClient.invalidatePrefetch();
-        showConfirmation(result.booking, bookingData);
-        goToStep(5);
-      })
-      .catch(function (err) {
-        hideLoading();
-        _submitting = false;
-        if (submitBtn) submitBtn.disabled = false;
-        if (err.code === 'SLOT_TAKEN') {
-          showError('This time slot was just taken. Please select another time.', 5000);
-          // Refresh against fresh data, not the stale snapshot that still lists
-          // the taken slot.
-          ApiClient.invalidatePrefetch();
-          goToStep(3);
-          CalendarUI.refresh();
-        } else {
-          showError(err.message || 'Failed to create booking. Please try again.', 8000);
-        }
-      });
-  }
-
-  function showConfirmation(booking, formData) {
-    var container = document.getElementById('confirmation-content');
-    container.textContent = '';
-
-    var box = document.createElement('div');
-    box.className = 'confirmation-box';
-
-    var checkmark = document.createElement('div');
-    checkmark.className = 'checkmark';
-    checkmark.textContent = '\u2713';
-    box.appendChild(checkmark);
-
-    var h2 = document.createElement('h2');
-    h2.textContent = 'Booking Confirmed!';
-    box.appendChild(h2);
-
-    var details = document.createElement('dl');
-    details.className = 'confirmation-details';
-
-    var durationLabel = _selectedDuration === 60 ? '1 hr' : _selectedDuration + ' min';
-
-    var fields = [
-      { label: 'Meeting Type', value: _selectedType.name },
-      { label: 'Duration', value: durationLabel },
-      { label: 'Date & Time', value: TimezoneUtil.formatDateTime(booking.start) + ' (' + TimezoneUtil.getTimezoneAbbreviation() + ')' },
-      { label: 'Format', value: formData.format },
-      { label: 'Location', value: formData.location },
-      { label: 'Name', value: formData.firstName + ' ' + formData.lastName },
-      { label: 'Email', value: formData.email },
-    ];
-
-    if (formData.purpose) {
-      fields.push({ label: 'Purpose', value: formData.purpose });
-    }
-
-    fields.forEach(function (field) {
-      var dt = document.createElement('dt');
-      dt.textContent = field.label;
-      details.appendChild(dt);
-      var dd = document.createElement('dd');
-      dd.textContent = field.value;
-      details.appendChild(dd);
+        _selectedSlot = null;
+        goToStep(2);
+        showError('That time is no longer available for the selected quantity. Choose another time.');
+        CalendarUI.refresh();
+      } else showError(error.message || 'Could not confirm this booking. Please try again.');
+    }).finally(function () {
+      hideLoading(); _submitting = false;
+      if (button) button.disabled = false;
     });
-
-    box.appendChild(details);
-
-    var links = document.createElement('div');
-    links.className = 'confirmation-links';
-
-    if (booking.cancelUrl) {
-      var cancelLink = document.createElement('a');
-      cancelLink.href = booking.cancelUrl;
-      cancelLink.textContent = 'Cancel Booking';
-      links.appendChild(cancelLink);
-    }
-
-    if (booking.rescheduleUrl) {
-      var rescheduleLink = document.createElement('a');
-      rescheduleLink.href = booking.rescheduleUrl;
-      rescheduleLink.textContent = 'Reschedule';
-      links.appendChild(rescheduleLink);
-    }
-
-    box.appendChild(links);
-
-    var note = document.createElement('p');
-    note.style.marginTop = '16px';
-    note.style.fontSize = '0.85rem';
-    note.style.color = '#636E72';
-    note.textContent = 'A calendar invite and confirmation email have been sent to ' + formData.email + '.';
-    box.appendChild(note);
-
-    container.appendChild(box);
   }
-
-  // Initialize on DOM ready. In the browser the script runs during parsing
-  // (readyState 'loading'), so init is deferred to DOMContentLoaded. If loaded
-  // after the DOM is ready, only auto-init when the app root is actually present
-  // — this avoids crashing at import time in a bare test/module context.
+  function renderSuccess(booking, formData) {
+    const container = document.getElementById('confirmation-content');
+    container.textContent = '';
+    const heading = document.createElement('h2'); heading.textContent = 'Booking confirmed'; container.appendChild(heading);
+    const summary = document.createElement('p');
+    const when = booking && booking.start_at ? booking.start_at : _selectedSlot.start_at;
+    const zone = ((ConfigLoader.getConfig() || {}).settings || {}).business_timezone || 'UTC';
+    const businessTime = new Intl.DateTimeFormat(undefined, { timeZone: zone, weekday: 'long', month: 'long', day: 'numeric', year: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(when));
+    const browserZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    let displayTime = businessTime;
+    if (browserZone && browserZone !== zone) {
+      displayTime += ' · Your time: ' + new Intl.DateTimeFormat(undefined, { timeZone: browserZone, month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZoneName: 'short' }).format(new Date(when));
+    }
+    summary.textContent = _selectedService.name + ' · ' + displayTime + ' · ' + formData.email;
+    container.appendChild(summary);
+    if (booking && booking.booking_id) {
+      const id = document.createElement('p'); id.textContent = 'Booking reference: ' + booking.booking_id; container.appendChild(id);
+    }
+  }
   if (typeof document !== 'undefined') {
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', init);
-    } else if (document.getElementById('meeting-types')) {
-      init();
-    }
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init);
+    else if (document.getElementById('services')) init();
   }
-
-  return {
-    goToStep: goToStep,
-    showLoading: showLoading,
-    hideLoading: hideLoading,
-    showError: showError,
-    hideError: hideError,
-    submitBooking: submitBooking,
-    getSelectedType: function () { return _selectedType; },
-    getSelectedDuration: function () { return _selectedDuration; },
-    getSelectedSlot: function () { return _selectedSlot; },
-  };
+  return { init, goToStep, showLoading, hideLoading, showError, hideError, submitBooking,
+    getSelectedService: function () { return _selectedService; }, getSelectedSlot: function () { return _selectedSlot; } };
 })();
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = App;
-}
+if (typeof module !== 'undefined' && module.exports) module.exports = App;

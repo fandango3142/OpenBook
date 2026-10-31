@@ -1,6 +1,4 @@
-availability_pattern: "Jeremy office hours"
-min_notice_hours: 12
-max_advance_days: 90
-default_timezone: "America/New_York"
-theme_color: "#CCE2D8"
-apps_script_url: "https://script.google.com/macros/s/AKfycbxcBySOIJq1f2SP7oVTr3JgBc91qTxdFaQKknnoe8VdLJDxijKV-gGdFb9mNHdJLMMN/exec"
+brand_name: "OpenBook"
+default_timezone: "Asia/Kolkata"
+business_timezone: "Asia/Kolkata"
+apps_script_url: "YOUR_DEPLOYED_APPS_SCRIPT_WEB_APP_URL"

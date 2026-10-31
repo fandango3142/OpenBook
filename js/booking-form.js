@@ -1,193 +1,58 @@
-/**
- * BookingForm — form validation, data extraction, and submission.
- * Handles the Step 3 booking form with real-time validation.
- */
-
+/** Contact and quantity form for the public booking flow. */
 var BookingForm = (function () {
-  var _locations = [];
-
-  function init(locations) {
-    _locations = locations || [];
-    populateFormatDropdown();
-    setupFormHandler();
-  }
-
-  function populateFormatDropdown() {
-    var select = document.getElementById('format');
-    // Keep the first "Select format..." option
-    while (select.options.length > 1) {
-      select.remove(1);
-    }
-    _locations.forEach(function (loc) {
-      var option = document.createElement('option');
-      option.value = loc.id;
-      option.textContent = loc.label;
-      select.appendChild(option);
+  let _onSubmit = null;
+  function init(onSubmit) {
+    _onSubmit = onSubmit;
+    const form = document.getElementById('booking-form');
+    if (!form || form.dataset.initialized) return;
+    form.dataset.initialized = 'true';
+    form.addEventListener('submit', function (event) {
+      event.preventDefault();
+      const data = extractFormData();
+      const errors = validateAll(data, Number(document.getElementById('quantity').max || 1));
+      clearErrors();
+      Object.keys(errors).forEach(function (field) {
+        const message = document.getElementById(field + '-error');
+        const input = document.getElementById(field);
+        if (message) message.textContent = errors[field];
+        if (input) input.classList.add('invalid');
+      });
+      if (!Object.keys(errors).length && _onSubmit) _onSubmit(data);
     });
   }
-
-  function setupFormHandler() {
-    var form = document.getElementById('booking-form');
-    if (!form) return;
-
-    // Real-time validation on blur
-    var fields = ['first-name', 'last-name', 'email', 'format'];
-    fields.forEach(function (fieldId) {
-      var el = document.getElementById(fieldId);
-      if (el) {
-        el.addEventListener('blur', function () {
-          var name = fieldIdToName(fieldId);
-          var error = validateField(name, el.value);
-          showFieldError(fieldId, error);
-        });
-        el.addEventListener('input', function () {
-          el.classList.remove('invalid');
-          var errorEl = document.getElementById(fieldId + '-error');
-          if (errorEl) errorEl.textContent = '';
-        });
-      }
-    });
-
-    form.addEventListener('submit', function (e) {
-      e.preventDefault();
-      var data = extractFormData();
-      var errors = validateAll(data);
-
-      // Show all errors
-      clearAllErrors();
-      var hasErrors = false;
-      for (var field in errors) {
-        var fieldId = nameToFieldId(field);
-        showFieldError(fieldId, errors[field]);
-        hasErrors = true;
-      }
-
-      if (!hasErrors) {
-        App.submitBooking(data);
-      }
-    });
-  }
-
-  function validateField(name, value) {
-    switch (name) {
-      case 'firstName':
-        if (!value || !value.trim()) return 'First name is required';
-        return '';
-      case 'lastName':
-        if (!value || !value.trim()) return 'Last name is required';
-        return '';
-      case 'email':
-        if (!value || !value.trim()) return 'Email is required';
-        if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(value)) return 'Please enter a valid email address';
-        return '';
-      case 'format':
-        if (!value || !value.trim()) return 'Please select a meeting format';
-        return '';
-      default:
-        return '';
-    }
-  }
-
-  function validateAll(data) {
-    var errors = {};
-    var fields = ['firstName', 'lastName', 'email', 'format'];
-    fields.forEach(function (field) {
-      var error = validateField(field, data[field]);
-      if (error) {
-        errors[field] = error;
-      }
-    });
+  function validateAll(data, capacity) {
+    const errors = {};
+    const name = String(data.name || '').trim();
+    const email = String(data.email || '').trim();
+    const quantity = Number(data.quantity);
+    if (!name) errors.name = 'Name is required';
+    if (!email) errors.email = 'Email is required';
+    else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) errors.email = 'Please enter a valid email address';
+    if (!Number.isSafeInteger(quantity) || quantity < 1) errors.quantity = 'Choose a valid quantity';
+    else if (quantity > capacity) errors.quantity = `Only ${capacity} places remain`;
     return errors;
   }
-
   function extractFormData() {
-    return {
-      firstName: (document.getElementById('first-name').value || '').trim(),
-      lastName: (document.getElementById('last-name').value || '').trim(),
-      email: (document.getElementById('email').value || '').trim(),
-      format: (document.getElementById('format').value || '').trim(),
-      purpose: (document.getElementById('purpose').value || '').trim(),
-      notes: (document.getElementById('notes').value || '').trim(),
-      // Honeypot: real users never see this field, so a non-empty value flags a bot.
-      hp: (function () { var el = document.getElementById('hp'); return el ? el.value : ''; })(),
-    };
+    function value(id) { const element = document.getElementById(id); return element ? element.value.trim() : ''; }
+    return { name: value('name'), email: value('email'), phone: value('phone'),
+      quantity: Number(value('quantity') || 1), hp: value('hp') };
   }
-
-  function showFieldError(fieldId, message) {
-    var input = document.getElementById(fieldId);
-    var errorEl = document.getElementById(fieldId + '-error');
-    if (message) {
-      if (input) input.classList.add('invalid');
-      if (errorEl) errorEl.textContent = message;
-    } else {
+  function setCapacity(capacity) {
+    const input = document.getElementById('quantity');
+    const label = document.querySelector('label[for="quantity"]');
+    if (!input) return;
+    const count = Math.max(1, Math.floor(Number(capacity) || 1));
+    input.min = '1'; input.max = String(count); input.value = '1'; input.disabled = count === 1;
+    if (label) label.textContent = count === 1 ? 'Quantity' : 'Number of places';
+  }
+  function clearErrors() {
+    ['name', 'email', 'quantity'].forEach(function (id) {
+      const message = document.getElementById(id + '-error');
+      const input = document.getElementById(id);
+      if (message) message.textContent = '';
       if (input) input.classList.remove('invalid');
-      if (errorEl) errorEl.textContent = '';
-    }
-  }
-
-  function clearAllErrors() {
-    var fields = ['first-name', 'last-name', 'email', 'format'];
-    fields.forEach(function (fieldId) {
-      showFieldError(fieldId, '');
     });
   }
-
-  function fieldIdToName(fieldId) {
-    var map = {
-      'first-name': 'firstName',
-      'last-name': 'lastName',
-      'email': 'email',
-      'format': 'format',
-    };
-    return map[fieldId] || fieldId;
-  }
-
-  function nameToFieldId(name) {
-    var map = {
-      'firstName': 'first-name',
-      'lastName': 'last-name',
-      'email': 'email',
-      'format': 'format',
-    };
-    return map[name] || name;
-  }
-
-  /**
-   * Re-populate the format dropdown, optionally filtering to only allowed location IDs.
-   * If allowedIds is null/undefined, shows all locations.
-   */
-  function updateLocations(allowedIds) {
-    var filtered = _locations;
-    if (allowedIds && allowedIds.length > 0) {
-      filtered = _locations.filter(function (loc) {
-        return allowedIds.indexOf(loc.id) !== -1;
-      });
-    }
-    var select = document.getElementById('format');
-    while (select.options.length > 1) {
-      select.remove(1);
-    }
-    filtered.forEach(function (loc) {
-      var option = document.createElement('option');
-      option.value = loc.id;
-      option.textContent = loc.label;
-      select.appendChild(option);
-    });
-    // Auto-select if only one option
-    if (filtered.length === 1) {
-      select.value = filtered[0].id;
-    }
-  }
-
-  return {
-    init: init,
-    validateField: validateField,
-    validateAll: validateAll,
-    extractFormData: extractFormData,
-    updateLocations: updateLocations,
-  };
+  return { init, validateAll, extractFormData, setCapacity, clearErrors };
 })();
-
-if (typeof module !== 'undefined' && module.exports) {
-  module.exports = BookingForm;
-}
+if (typeof module !== 'undefined' && module.exports) module.exports = BookingForm;
