@@ -52,7 +52,28 @@ var CalendarGateway = (function () {
     var existing = calendar.getEventById(id);
     if (existing) existing.deleteEvent();
   }
-  return { listConflicts: listConflicts, createBookingEvent: createBookingEvent, deleteEvent: deleteEvent };
+  function getEventInterval(id) {
+    var calendar = CalendarApp.getCalendarById(SheetStore.getSetting('booking_calendar_id'));
+    if (!calendar) throw new Error('Booking calendar unavailable');
+    var existing = calendar.getEventById(id);
+    if (!existing) throw new Error('Booking event unavailable');
+    var start = TimeService.instant(existing.getStartTime());
+    var end = TimeService.instant(existing.getEndTime());
+    if (start >= end) throw new Error('Invalid booking event interval');
+    return { start_at: start.toISOString(), end_at: end.toISOString() };
+  }
+  function updateEvent(id, start, end) {
+    var from = TimeService.instant(start), to = TimeService.instant(end);
+    if (from >= to) throw new Error('Invalid booking event interval');
+    var calendar = CalendarApp.getCalendarById(SheetStore.getSetting('booking_calendar_id'));
+    if (!calendar) throw new Error('Booking calendar unavailable');
+    var existing = calendar.getEventById(id);
+    if (!existing) throw new Error('Booking event unavailable');
+    existing.setTime(from, to);
+    return true;
+  }
+  return { listConflicts: listConflicts, createBookingEvent: createBookingEvent, deleteEvent: deleteEvent,
+    getEventInterval: getEventInterval, updateEvent: updateEvent };
 })();
 
 /**

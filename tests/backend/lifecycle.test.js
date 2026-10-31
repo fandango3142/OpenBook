@@ -98,4 +98,107 @@ r.test('public management actions are routed through POST', () => {
     'VALIDATION_ERROR');
 });
 
+r.test('business rescheduling changes the interval in place without changing durable identity', () => {
+  const ctx = makeCtx();
+  ctx.SheetStore.updateById('Services', 'service_id', 'SRV_demo', { capacity: 1 });
+  const created = makeBooking(ctx);
+  const before = ctx.BookingStore.getById(created.booking.booking_id);
+  const eventBefore = ctx._createdEvents[0];
+  const nextStart = new Date(new Date(before.start_at).getTime() + 3600000).toISOString();
+  const after = ctx.BookingService.reschedule(before.booking_id, { start_at: nextStart }, 'owner@example.com');
+  const stored = ctx.BookingStore.getById(before.booking_id);
+  assert.strictEqual(after.booking_id, before.booking_id);
+  assert.strictEqual(stored.booking_id, before.booking_id);
+  assert.strictEqual(stored.manage_token_hash, before.manage_token_hash);
+  assert.strictEqual(stored.status, 'CONFIRMED');
+  assert.strictEqual(stored.start_at, nextStart);
+  assert.strictEqual(eventBefore._deleted, false);
+  assert.strictEqual(eventBefore.start.toISOString(), nextStart);
+  assert.deepStrictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1).map(e => e.event_type), ['BOOKING_RESCHEDULED']);
+});
+
+r.test('a failed booking write restores the Calendar interval after the Calendar move', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  const before = ctx.BookingStore.getById(created.booking.booking_id);
+  const event = ctx._createdEvents[0];
+  ctx._failUpdateFor.push('Bookings');
+  assert.throws(() => ctx.BookingService.reschedule(before.booking_id,
+    { start_at: new Date(new Date(before.start_at).getTime() + 3600000).toISOString() }, 'owner@example.com'));
+  assert.strictEqual(ctx.BookingStore.getById(before.booking_id).start_at, before.start_at);
+  assert.strictEqual(event.start.toISOString(), before.start_at);
+  assert.strictEqual(event.end.toISOString(), before.end_at);
+  assert.strictEqual(event._deleted, false);
+});
+
+r.test('a partially applied Sheet interval update restores the entire original booking', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  const before = ctx.BookingStore.getById(created.booking.booking_id);
+  const event = ctx._createdEvents[0];
+  ctx._failUpdateAfter.Bookings = 3;
+  assert.throws(() => ctx.BookingService.reschedule(before.booking_id,
+    { start_at: new Date(new Date(before.start_at).getTime() + 3600000).toISOString() }, 'owner@example.com'));
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(ctx.BookingStore.getById(before.booking_id))), JSON.parse(JSON.stringify(before)));
+  assert.strictEqual(event.start.toISOString(), before.start_at);
+  assert.strictEqual(event.end.toISOString(), before.end_at);
+});
+
+r.test('cancellation approval removes the linked event and releases reserved capacity', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  ctx.SheetStore.setSetting('customer_cancellation_enabled', 'true');
+  ctx.BookingService.requestCancellation(created.manage_token);
+  const bookingId = created.booking.booking_id;
+  const updated = ctx.BookingService.approveCancellation(bookingId, 'owner@example.com');
+  assert.strictEqual(updated.status, 'CANCELLED');
+  assert.strictEqual(ctx._createdEvents[0]._deleted, true);
+  assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 0);
+  assert.strictEqual(ctx.BookingStore.getById(bookingId).cancelled_at !== '', true);
+});
+
+r.test('rejecting a cancellation request returns it to confirmed and retains capacity', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  ctx.SheetStore.setSetting('customer_cancellation_enabled', 'true');
+  ctx.BookingService.requestCancellation(created.manage_token);
+  const updated = ctx.BookingService.rejectCancellation(created.booking.booking_id, 'owner@example.com');
+  assert.strictEqual(updated.status, 'CONFIRMED');
+  assert.strictEqual(ctx.BookingStore.listActive(created.booking.start_at, created.booking.end_at, 'SRV_demo').length, 1);
+  assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').slice(-1)[0].event_type, 'CANCELLATION_REJECTED');
+});
+
+r.test('completed and no-show are rejected before start and idempotent after start', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  const id = created.booking.booking_id;
+  assert.throws(() => ctx.BookingService.markCompleted(id, 'owner@example.com'), e => e.domainCode === 'INVALID_STATE');
+  assert.throws(() => ctx.BookingService.markNoShow(id, 'owner@example.com'), e => e.domainCode === 'INVALID_STATE');
+  const past = new Date(Date.now() - 3600000).toISOString();
+  ctx.SheetStore.updateById('Bookings', 'booking_id', id, { start_at: past, end_at: new Date(Date.now() - 1800000).toISOString() });
+  assert.strictEqual(ctx.BookingService.markCompleted(id, 'owner@example.com').status, 'COMPLETED');
+  assert.strictEqual(ctx.BookingService.markCompleted(id, 'owner@example.com').status, 'COMPLETED');
+  const other = makeBooking(ctx);
+  ctx.SheetStore.updateById('Bookings', 'booking_id', other.booking.booking_id,
+    { start_at: new Date(Date.now() - 7200000).toISOString(), end_at: new Date(Date.now() - 5400000).toISOString() });
+  assert.strictEqual(ctx.BookingService.markNoShow(other.booking.booking_id, 'owner@example.com').status, 'NO_SHOW');
+  assert.strictEqual(ctx.BookingService.markNoShow(other.booking.booking_id, 'owner@example.com').status, 'NO_SHOW');
+  assert.strictEqual(ctx.SheetStore.readAll('BookingEvents').filter(e => e.booking_id === id && e.event_type === 'COMPLETED').length, 1);
+});
+
+r.test('failed Calendar reschedule leaves booking and event interval unchanged', () => {
+  const ctx = makeCtx();
+  const created = makeBooking(ctx);
+  const before = ctx.BookingStore.getById(created.booking.booking_id);
+  const event = ctx._createdEvents[0];
+  ctx._failCalendarUpdate = true;
+  assert.throws(() => ctx.BookingService.reschedule(before.booking_id,
+    { start_at: new Date(new Date(before.start_at).getTime() + 3600000).toISOString() }, 'owner@example.com'),
+  e => e.domainCode === 'INTERNAL_ERROR');
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(ctx.BookingStore.getById(before.booking_id))), JSON.parse(JSON.stringify(before)));
+  assert.strictEqual(event._deleted, false);
+  assert.strictEqual(event.start.toISOString(), before.start_at);
+  assert.strictEqual(event.end.toISOString(), before.end_at);
+});
+
 if (require.main === module) process.exit(r.done() === 0 ? 0 : 1);

@@ -159,6 +159,122 @@ var BookingService = (function () {
       return { booking: publicBooking(requested) };
     });
   }
+  function requireExistingBooking(bookingId) {
+    if (typeof bookingId !== 'string' || !bookingId.trim()) throw error('VALIDATION_ERROR');
+    var booking = BookingStore.getById(bookingId);
+    if (!booking) throw error('INVALID_STATE');
+    return booking;
+  }
+  function persistLifecycle(booking, status, actor, extra, type, metadata) {
+    var patch = Object.assign({ status: status, updated_at: new Date().toISOString() }, extra || {});
+    var updated = Object.assign({}, booking, patch);
+    var wrote = false;
+    try {
+      // updateById writes one Sheet cell at a time and can fail partway through.
+      // Treat the attempt as potentially mutating so compensation restores every field.
+      wrote = true;
+      if (!SheetStore.updateById('Bookings', 'booking_id', booking.booking_id, patch)) throw error('INTERNAL_ERROR');
+      BookingStore.appendEvent({ event_id: Domain.newId('EVT'), booking_id: booking.booking_id,
+        event_type: type, actor: actor || 'SYSTEM', timestamp: new Date().toISOString(),
+        metadata_json: JSON.stringify(metadata || {}) });
+      SpreadsheetApp.flush();
+      return updated;
+    } catch (err) {
+      if (wrote) {
+        try {
+          var restore = { status: booking.status, updated_at: booking.updated_at };
+          ['start_at', 'end_at', 'cancelled_at', 'completed_at'].forEach(function (key) {
+            if (Object.prototype.hasOwnProperty.call(patch, key)) restore[key] = booking[key] || '';
+          });
+          SheetStore.updateById('Bookings', 'booking_id', booking.booking_id, restore);
+        } catch (rollbackError) { Logger.log('BOOKING_STATE_ROLLBACK_FAILED'); }
+      }
+      throw err;
+    }
+  }
+  function reschedule(bookingId, replacement, actor) {
+    try { Schema.ensureCurrent(); }
+    catch (schemaError) {
+      if (schemaError.message === 'Schema migration lock unavailable') throw error('LOCK_TIMEOUT');
+      throw schemaError;
+    }
+    return LockGateway.withLock(10000, function () {
+      var booking = requireExistingBooking(bookingId);
+      if (booking.status !== 'CONFIRMED' && booking.status !== 'RESCHEDULE_REQUESTED') throw error('INVALID_STATE');
+      if (!replacement || typeof replacement !== 'object' || Array.isArray(replacement) ||
+          (replacement.service_id !== undefined && replacement.service_id !== booking.service_id)) throw error('VALIDATION_ERROR');
+      var start;
+      try { start = TimeService.instant(replacement.start_at).toISOString(); }
+      catch (e) { throw error('VALIDATION_ERROR'); }
+      var check = AvailabilityService.check({ service_id: booking.service_id, start_at: start,
+        quantity: booking.quantity, exclude_booking_id: booking.booking_id });
+      if (!check.ok) throw error(check.code);
+      var oldCalendarInterval = CalendarGateway.getEventInterval(booking.calendar_event_id);
+      var moved = false;
+      try {
+        CalendarGateway.updateEvent(booking.calendar_event_id, start, check.end_at);
+        moved = true;
+        var updated = persistLifecycle(booking, 'CONFIRMED', actor,
+          { start_at: start, end_at: check.end_at }, 'BOOKING_RESCHEDULED',
+          { previous_start_at: booking.start_at, previous_end_at: booking.end_at });
+        return updated;
+      } catch (err) {
+        if (moved) {
+          try { CalendarGateway.updateEvent(booking.calendar_event_id, oldCalendarInterval.start_at, oldCalendarInterval.end_at); }
+          catch (rollbackError) { Logger.log('BOOKING_RESCHEDULE_CALENDAR_ROLLBACK_FAILED'); }
+        }
+        throw err && err.domainCode ? err : error('INTERNAL_ERROR');
+      }
+    });
+  }
+  function cancel(bookingId, actor) {
+    return transition(bookingId, 'CANCELLED', actor, 'BOOKING_CANCELLED', { cancelled_at: new Date().toISOString() }, true, null, true);
+  }
+  function transition(bookingId, to, actor, eventType, extra, removeCalendar, requiredFrom, idempotent) {
+    try { Schema.ensureCurrent(); }
+    catch (schemaError) {
+      if (schemaError.message === 'Schema migration lock unavailable') throw error('LOCK_TIMEOUT');
+      throw schemaError;
+    }
+    return LockGateway.withLock(10000, function () {
+      var booking = requireExistingBooking(bookingId);
+      if (booking.status === to && idempotent) return booking;
+      if (requiredFrom && booking.status !== requiredFrom) throw error('INVALID_STATE');
+      var now = new Date();
+      if (!Domain.canTransition(booking.status, to, booking, now)) throw error('INVALID_STATE');
+      var updated = persistLifecycle(booking, to, actor, extra, eventType);
+      if (removeCalendar && booking.calendar_event_id) {
+        try { CalendarGateway.deleteEvent(booking.calendar_event_id); }
+        catch (deleteError) {
+          try {
+            SheetStore.updateById('Bookings', 'booking_id', booking.booking_id,
+              { status: booking.status, updated_at: booking.updated_at, cancelled_at: booking.cancelled_at || '' });
+            BookingStore.appendEvent(event(booking.booking_id, 'BOOKING_CANCELLATION_ROLLED_BACK', actor));
+            SpreadsheetApp.flush();
+          } catch (rollbackError) { Logger.log('BOOKING_CANCELLATION_ROLLBACK_FAILED'); }
+          throw error('INTERNAL_ERROR');
+        }
+      }
+      return updated;
+    });
+  }
+  function approveCancellation(bookingId, actor) {
+    return transition(bookingId, 'CANCELLED', actor, 'CANCELLATION_APPROVED',
+      { cancelled_at: new Date().toISOString() }, true, 'CANCELLATION_REQUESTED', true);
+  }
+  function rejectCancellation(bookingId, actor) {
+    return transition(bookingId, 'CONFIRMED', actor, 'CANCELLATION_REJECTED', { cancelled_at: '' }, false);
+  }
+  function markCompleted(bookingId, actor) {
+    return transition(bookingId, 'COMPLETED', actor, 'COMPLETED',
+      { completed_at: new Date().toISOString() }, false, null, true);
+  }
+  function markNoShow(bookingId, actor) {
+    return transition(bookingId, 'NO_SHOW', actor, 'NO_SHOW', {}, false, null, true);
+  }
   return { create: create, getManaged: getManaged, requestCancellation: requestCancellation,
-    requestReschedule: requestReschedule, error: error, publicBooking: publicBooking };
+    requestReschedule: requestReschedule, reschedule: reschedule, cancel: cancel,
+    approveCancellation: approveCancellation, rejectCancellation: rejectCancellation,
+    markCompleted: markCompleted, markNoShow: markNoShow,
+    error: error, publicBooking: publicBooking };
 })();

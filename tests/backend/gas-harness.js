@@ -121,6 +121,15 @@ function loadBackend(opts, files) {
           if (!found || found._deleted) return null;
           return {
             getLocation: function () { return found.options.location || ''; },
+            getStartTime: function () { return new Date(found.start); },
+            getEndTime: function () { return new Date(found.end); },
+            setTime: function (start, end) {
+              if (sandbox._failCalendarUpdate) throw new Error('calendar update failed');
+              found.start = new Date(start);
+              found.end = new Date(end);
+              found._resource.start.dateTime = found.start.toISOString();
+              found._resource.end.dateTime = found.end.toISOString();
+            },
             deleteEvent: function () { found._deleted = true; },
           };
         },
@@ -219,9 +228,20 @@ function loadBackend(opts, files) {
   const sheets = {};
   const failAppendFor = (opts.failAppendFor || []).slice();
   const failUpdateFor = (opts.failUpdateFor || []).slice();
+  const failUpdateAfter = Object.assign({}, opts.failUpdateAfter || {});
   sandbox._sheets = sheets;
   sandbox._failAppendFor = failAppendFor;
   sandbox._failUpdateFor = failUpdateFor;
+  sandbox._failUpdateAfter = failUpdateAfter;
+  function beforeUpdate(name) {
+    if (failUpdateFor.indexOf(name) !== -1) throw new Error('update failed for ' + name);
+    if (!Object.prototype.hasOwnProperty.call(failUpdateAfter, name)) return;
+    if (failUpdateAfter[name] <= 0) {
+      delete failUpdateAfter[name];
+      throw new Error('injected partial update failure for ' + name);
+    }
+    failUpdateAfter[name]--;
+  }
   function makeSheet(name, initialRows) {
     const sheet = {
       name: name,
@@ -241,7 +261,7 @@ function loadBackend(opts, files) {
         return {
           getValue: function () { return self.rows[row - 1] && self.rows[row - 1][col - 1]; },
           setValue: function (value) {
-            if (failUpdateFor.indexOf(name) !== -1) throw new Error('update failed for ' + name);
+            beforeUpdate(name);
             if (!self.rows[row - 1]) self.rows[row - 1] = [];
             self.rows[row - 1][col - 1] = value;
           },
@@ -258,7 +278,7 @@ function loadBackend(opts, files) {
             return out;
           },
           setValues: function (values) {
-            if (failUpdateFor.indexOf(name) !== -1) throw new Error('update failed for ' + name);
+            beforeUpdate(name);
             for (let r = 0; r < numRows; r++) {
               if (!self.rows[row - 1 + r]) self.rows[row - 1 + r] = [];
               for (let c = 0; c < numCols; c++) self.rows[row - 1 + r][col - 1 + c] = values[r][c];
@@ -285,6 +305,7 @@ function loadBackend(opts, files) {
     },
     flush: function () { operationOrder.push('flush'); },
   };
+  sandbox.Session = { getActiveUser: function () { return { getEmail: function () { return sandbox._activeEmail || ''; } }; } };
   sandbox._setSetting = function (key, value) {
     const sheet = sheets.Settings || (sheets.Settings = makeSheet('Settings', [['key', 'value']]));
     const row = sheet.rows.find(function (r) { return r[0] === key; });
