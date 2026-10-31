@@ -12,13 +12,14 @@ var LockGateway = (function () {
 var BookingService = (function () {
   function error(code) { var err = new Error(code); err.domainCode = code; return err; }
   function contact(command) {
-    if (!command || typeof command !== 'object' || typeof command.name !== 'string' ||
-        !command.name.trim() || command.name.length > 160 || typeof command.email !== 'string' ||
-        command.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(command.email.trim()) ||
-        (command.phone !== undefined && (typeof command.phone !== 'string' || command.phone.length > 40))) {
+    var customer = command && command.customer && typeof command.customer === 'object' ? command.customer : command;
+    if (!command || typeof customer !== 'object' || typeof customer.name !== 'string' ||
+        !customer.name.trim() || customer.name.length > 160 || typeof customer.email !== 'string' ||
+        customer.email.length > 254 || !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(customer.email.trim()) ||
+        (customer.phone !== undefined && (typeof customer.phone !== 'string' || customer.phone.length > 40))) {
       throw error('VALIDATION_ERROR');
     }
-    return { name: command.name.trim(), email: command.email.trim().toLowerCase(), phone: (command.phone || '').trim() };
+    return { name: customer.name.trim(), email: customer.email.trim().toLowerCase(), phone: (customer.phone || '').trim() };
   }
   function publicBooking(record) {
     return { booking_id: record.booking_id, service_id: record.service_id,

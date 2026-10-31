@@ -28,7 +28,11 @@ function doPost(e) {
   catch (err) { return jsonResponse({ success: false, error: 'VALIDATION_ERROR' }); }
   return routePublic(data);
 }
-function doGet(e) { return routePublic((e && e.parameter) || {}); }
+function doGet(e) {
+  var data = (e && e.parameter) || {};
+  if (data.action === 'listServices' || data.action === 'getAvailability') return routePublic(data);
+  return jsonResponse({ success: false, error: 'VALIDATION_ERROR' });
+}
 function handleListServices(data) {
   try {
     ensureApplicationReady();
@@ -67,7 +71,8 @@ function rateLimitOk(action, data) {
   var cid = String(data.clientId || 'anon').slice(0,64);
   if (action === 'createBooking') {
     if (!rateBump(cache, 'rlw_' + cid, parseInt(Config.get('RATE_LIMIT_WRITE_PER_CLIENT'),10) || 15, 60)) return false;
-    var email = typeof data.email === 'string' ? data.email.trim().toLowerCase().slice(0,254) : '';
+    var customer = data.customer && typeof data.customer === 'object' ? data.customer : data;
+    var email = typeof customer.email === 'string' ? customer.email.trim().toLowerCase().slice(0,254) : '';
     if (email && !rateBump(cache, 'rlwe_' + TokenService.hash(email), parseInt(Config.get('RATE_LIMIT_WRITE_PER_EMAIL'),10) || 10, 3600)) return false;
     return rateBump(cache, 'rlw_global', parseInt(Config.get('RATE_LIMIT_WRITE_GLOBAL'),10) || 300, 60);
   }

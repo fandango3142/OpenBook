@@ -17,6 +17,19 @@ r.test('creates a booking and returns only public fields and the one-time token'
   assert.strictEqual(new Date(result.booking.end_at)-new Date(result.booking.start_at),1800000);
   ['customer_id','calendar_event_id','manage_token_hash','customer_email_snapshot'].forEach(k=>assert.ok(!(k in result.booking)));
 });
+r.test('accepts the approved nested customer booking payload',()=>{
+  const ctx=makeCtx(); const input=cmd();
+  const result=post(ctx,{action:'createBooking',service_id:input.service_id,start_at:input.start_at,quantity:input.quantity,
+    customer:{name:input.name,email:input.email,phone:input.phone},hp:''});
+  assert.strictEqual(result.success,true);
+  assert.strictEqual(ctx.BookingStore.getById(result.booking.booking_id).customer_email_snapshot,input.email);
+});
+r.test('GET requests cannot create bookings',()=>{
+  const ctx=makeCtx(); const input=cmd();
+  const result=parseResponse(ctx.doGet({parameter:Object.assign({action:'createBooking'},input)}));
+  assert.strictEqual(result.error,'VALIDATION_ERROR');
+  assert.strictEqual(ctx.BookingStore.listActive(input.start_at,new Date(new Date(input.start_at).getTime()+1800000).toISOString(),'SRV_demo').length,0);
+});
 r.test('maps domain capacity errors and leaves Sheets authoritative after Calendar deletion',()=>{
   const ctx=makeCtx(); const data=Object.assign(cmd({quantity:3}),{action:'createBooking'});
   assert.strictEqual(post(ctx,data).success,true); ctx._createdEvents[0]._deleted=true;
