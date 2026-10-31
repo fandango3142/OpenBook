@@ -6,20 +6,18 @@ The approved milestone one design is documented in [the booking engine spec](doc
 
 ## Development
 
-Install the pinned frontend test dependencies and run the upstream baseline checks:
+Install the pinned frontend test dependencies and run the test suites:
 
 ```bash
 npm ci --prefix tests/frontend
 npm test
 ```
 
-The root `npm test` command runs the backend Node tests followed by the frontend Jest tests. The imported upstream baseline currently has four failing reconciliation assertions, so this command stops before Jest. To run the frontend suite separately:
+The root `npm test` command runs the backend Node tests followed by the frontend Jest tests. To run the frontend suite separately:
 
 ```bash
-npm --prefix tests/frontend test -- --runInBand
+npm --prefix tests/frontend test -- --runInBand --cacheDirectory node_modules/.cache/jest
 ```
-
-That frontend command currently passes all 69 tests.
 
 ## Attribution
 

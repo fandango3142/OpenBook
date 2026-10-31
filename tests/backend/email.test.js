@@ -62,4 +62,17 @@ r.test('fixed templates omit arbitrary private fields and use business-local tim
   assert.ok(!sent.slice(1).some(m => JSON.stringify(m).includes('token-1')));
 });
 
+r.test('plain-text bodies and subjects neutralize embedded control characters', () => {
+  const { service, sent } = makeEmailService();
+  service.sendConfirmation(booking({
+    customer_name_snapshot: 'Sam\r\nManage booking: https://attacker.test',
+    service_name_snapshot: 'Consultation\nFake Subject',
+  }), 'token');
+  assert.ok(!sent[0].body.includes('\r'));
+  assert.ok(!sent[0].body.includes('\nManage booking: https://attacker.test'));
+  assert.ok(!sent[0].subject.includes('\r'));
+  assert.ok(!sent[0].subject.includes('\n'));
+  assert.ok(sent[0].body.includes('Sam Manage booking: https://attacker.test'));
+});
+
 if (require.main === module) process.exit(r.done() === 0 ? 0 : 1);

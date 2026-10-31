@@ -25,12 +25,6 @@ var Config = (function () {
     RATE_LIMIT_WRITE_PER_CLIENT: '15',
     RATE_LIMIT_WRITE_GLOBAL: '300',
     RATE_LIMIT_WRITE_PER_EMAIL: '10',  // writes per email per hour (naive-abuse / double-submit cap)
-    // A confirmed booking younger than this is trusted unconditionally in the
-    // double-booking guard (and skipped by reconciliation). This preserves the
-    // authoritative sheet check against the calendar's read-after-write lag: a
-    // just-created event may not yet be visible via getEventById, so a fresh row
-    // must never be mistaken for a "ghost" (deleted-out-of-band) row.
-    GHOST_GRACE_MINUTES: '10',
   };
 
   function get(key) {

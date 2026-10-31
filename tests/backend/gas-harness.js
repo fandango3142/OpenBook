@@ -133,8 +133,7 @@ function loadBackend(opts, files) {
             deleteEvent: function () { found._deleted = true; },
           };
         },
-        // Returns only ACTIVE events overlapping [start, end] (deleted ones are
-        // absent), mirroring CalendarApp.getEvents used by eventIsActive.
+        // Returns only active events overlapping [start, end] (deleted ones are absent).
         getEvents: function (start, end) {
           var qs = new Date(start).getTime(), qe = new Date(end).getTime();
           var out = [];

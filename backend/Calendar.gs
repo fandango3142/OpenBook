@@ -503,45 +503,9 @@ var CalendarService = (function () {
     };
   }
 
-  /**
-   * Does an ACTIVE (non-cancelled) calendar event with this id still exist at the
-   * booking's time?
-   *
-   * Uses CalendarApp.getEvents() over the booking's own window: it returns ONLY
-   * active events, so a deleted or cancelled event is simply absent. This is
-   * deliberately NOT CalendarApp.getEventById() (which returns a stale object or
-   * throws for a recently deleted/cancelled event) and NOT the Advanced Calendar
-   * API (which isn't enabled in this project — Calendar.Events.get throws
-   * "Calendar is not defined"). CalendarApp is always available.
-   *
-   * Fails CLOSED: any error, unusable dates, or a missing calendar returns true
-   * (treat as still active) so a hiccup can never make a live booking look like a
-   * ghost and open a double-booking. A ghost is declared only when the calendar
-   * is read successfully and no active event carries this id.
-   */
-  function eventIsActive(eventId, startISO, endISO) {
-    if (!eventId) return true; // unverifiable -> fail closed
-    try {
-      var cal = CalendarApp.getCalendarById(Config.get('CALENDAR_ID'));
-      if (!cal) return true;
-      var s = new Date(startISO), e = new Date(endISO);
-      if (isNaN(s.getTime()) || isNaN(e.getTime())) return true; // can't verify -> fail closed
-      // Pad by a second so an event sharing an exact boundary is still returned.
-      var events = cal.getEvents(new Date(s.getTime() - 1000), new Date(e.getTime() + 1000));
-      for (var i = 0; i < events.length; i++) {
-        if (events[i].getId() === eventId) return true;
-      }
-      return false; // read succeeded, id absent -> event is gone
-    } catch (err) {
-      Logger.log('eventIsActive error for ' + eventId + ': ' + (err && err.message));
-      return true; // transient/unknown -> fail closed
-    }
-  }
-
   return {
     getAvailableSlots: getAvailableSlots,
     isRangeAvailable: isRangeAvailable,
-    eventIsActive: eventIsActive,
     debug: debug,
   };
 })();

@@ -1,7 +1,11 @@
 /** Fixed, privacy-safe customer lifecycle email templates. */
 var EmailService = (function () {
+  function safeText(value) {
+    return String(value == null ? '' : value).replace(/[\u0000-\u001f\u007f-\u009f]+/g, ' ').trim();
+  }
+
   function escapeHtml(value) {
-    return String(value == null ? '' : value).replace(/[&<>"']/g, function (ch) {
+    return safeText(value).replace(/[&<>"']/g, function (ch) {
       return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[ch];
     });
   }
@@ -15,17 +19,19 @@ var EmailService = (function () {
     var start = TimeService.formatInZone(booking.start_at, zone);
     var end = TimeService.formatInZone(booking.end_at, zone);
     return {
-      businessName: businessName(),
-      customerName: booking.customer_name_snapshot,
-      serviceName: booking.service_name_snapshot,
-      date: start.date,
-      time: start.time + '–' + end.time,
-      bookingId: booking.booking_id,
+      businessName: safeText(businessName()),
+      customerName: safeText(booking.customer_name_snapshot),
+      serviceName: safeText(booking.service_name_snapshot),
+      date: safeText(start.date),
+      time: safeText(start.time + '–' + end.time),
+      bookingId: safeText(booking.booking_id),
     };
   }
 
   function send(booking, title, managementUrl) {
     var data = details(booking);
+    title = safeText(title);
+    managementUrl = managementUrl ? safeText(managementUrl) : '';
     var subject = title + ': ' + data.serviceName + ' on ' + data.date;
     var body = 'Hello ' + data.customerName + ',\n\n'
       + title + '.\n\nService: ' + data.serviceName + '\nDate: ' + data.date
