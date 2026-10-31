@@ -14,7 +14,8 @@ const { loadBackend } = require('./gas-harness');
 const { createRunner } = require('./_runner');
 
 const CAL = 'cal-primary';
-const FILES = ['Booking.gs', 'Calendar.gs', 'Reconcile.gs'];
+const FILES = ['Calendar.gs', 'Reconcile.gs'];
+const LEGACY_HEADERS = ['token','eventId','status','startTime','endTime','createdAt','cancelledAt','email'];
 
 const CONFIG = {
   CALENDAR_ID: CAL,
@@ -37,8 +38,12 @@ function row(headers, spec) {
 function makeCtx(specs) {
   const ctx = loadBackend({ config: CONFIG, bookingRows: [], calendarEvents: { [CAL]: [] } }, FILES);
   ctx.Date = ReconcileTestDate;
-  const H = ctx.BookingStore.HEADERS;
+  const H = LEGACY_HEADERS;
   ctx._sheet._rows = [H.slice()].concat(specs.map(function (s) { return row(H, s); }));
+  ctx.BookingStore = { getByToken: function (token) {
+    const values = ctx._sheet.rows.find(function (r) { return r[0] === token; });
+    return values ? Object.fromEntries(LEGACY_HEADERS.map(function (h, i) { return [h, values[i]]; })) : null;
+  } };
   return ctx;
 }
 
@@ -133,65 +138,5 @@ r.test('never cancels a freshly-created row even if its event is not yet visible
   assert.strictEqual(ctx.BookingStore.getByToken('t-fresh').status, 'confirmed');
 });
 
-// --- doGet 'reconcile' action (key-gated, for the scheduled maintenance job) ---
-const FULL_FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'SheetStore.gs', 'Schema.gs', 'Reconcile.gs', 'Code.gs'];
-
-function makeFullCtx(specs, cleanupKey) {
-  const ctx = loadBackend({
-    config: { CALENDAR_ID: CAL, SPREADSHEET_ID: 'sheet-1', CLEANUP_KEY: cleanupKey },
-    bookingRows: [],
-    calendarEvents: { [CAL]: [] },
-  }, FULL_FILES);
-  ctx.Date = ReconcileTestDate;
-  const H = ctx.BookingStore.HEADERS;
-  ctx._sheet._rows = [H.slice()].concat(specs.map(function (s) { return row(H, s); }));
-  return ctx;
-}
-
-function doGetJson(ctx, params) {
-  return JSON.parse(ctx.doGet({ parameter: params }).getContent());
-}
-
-function doPostJson(ctx, body) {
-  return JSON.parse(ctx.doPost({ parameter: {}, postData: { contents: JSON.stringify(body) } }).getContent());
-}
-
-r.test('doGet reconcile rejects a missing or wrong key', function () {
-  const ctx = makeFullCtx([], 'secret-key');
-  assert.strictEqual(doGetJson(ctx, { action: 'reconcile' }).error, 'UNAUTHORIZED');
-  assert.strictEqual(doGetJson(ctx, { action: 'reconcile', key: 'nope' }).error, 'UNAUTHORIZED');
-});
-
-r.test('doGet reconcile with the right key runs the sweep', function () {
-  const ctx = makeFullCtx([
-    { token: 't-gone', eventId: 'evt-gone', status: 'confirmed', startTime: '2026-09-10T14:00:00.000Z', endTime: '2026-09-10T14:15:00.000Z' },
-  ], 'secret-key');
-  const res = doGetJson(ctx, { action: 'reconcile', key: 'secret-key' });
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-  assert.strictEqual(res.reconciled, 1);
-  assert.strictEqual(ctx.BookingStore.getByToken('t-gone').status, 'cancelled');
-});
-
-r.test('doPost reconcile (key in body) is the secure scheduled-job path', function () {
-  const ctx = makeFullCtx([
-    { token: 't-gone', eventId: 'evt-gone', status: 'confirmed', startTime: '2026-09-11T14:00:00.000Z', endTime: '2026-09-11T14:15:00.000Z' },
-  ], 'secret-key');
-  // wrong/missing key rejected...
-  assert.strictEqual(doPostJson(ctx, { action: 'reconcile' }).error, 'UNAUTHORIZED');
-  assert.strictEqual(doPostJson(ctx, { action: 'reconcile', key: 'nope' }).error, 'UNAUTHORIZED');
-  // ...right key runs the sweep, without needing a clientId or tripping booking limits.
-  const res = doPostJson(ctx, { action: 'reconcile', key: 'secret-key' });
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-  assert.strictEqual(res.reconciled, 1);
-  assert.strictEqual(ctx.BookingStore.getByToken('t-gone').status, 'cancelled');
-});
-
-r.test('doPost cleanup (key in body) authenticates and runs', function () {
-  const ctx = makeFullCtx([], 'secret-key');
-  assert.strictEqual(doPostJson(ctx, { action: 'cleanup', key: 'nope' }).error, 'UNAUTHORIZED');
-  const res = doPostJson(ctx, { action: 'cleanup', key: 'secret-key' });
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-  assert.ok(typeof res.deleted === 'number');
-});
-
+// Legacy direct reconciliation coverage remains until Task 8 removes the old engine.
 process.exit(r.done() === 0 ? 0 : 1);

@@ -41,6 +41,8 @@ function loadBackend(opts, files) {
   const reflectCreated = !!opts.reflectCreatedEvents;
 
   const sandbox = {};
+  const operationOrder = [];
+  sandbox._operationOrder = operationOrder;
   sandbox.console = console;
 
   // --- Config stub ---
@@ -155,9 +157,11 @@ function loadBackend(opts, files) {
         tryLock: function () {
           if (!lockGranted || lockHeld) return false;
           lockHeld = true;
+          operationOrder.push('lock');
+          if (opts.onLock) opts.onLock(sandbox);
           return true;
         },
-        releaseLock: function () { lockHeld = false; },
+        releaseLock: function () { operationOrder.push('unlock'); lockHeld = false; },
       };
     },
   };
@@ -166,7 +170,7 @@ function loadBackend(opts, files) {
   const sentEmails = [];
   sandbox._sentEmails = sentEmails;
   sandbox.EmailService = {
-    sendBookingConfirmation: function (r) { sentEmails.push({ type: 'confirm', record: r }); },
+    sendBookingConfirmation: function (r) { operationOrder.push('email'); if (opts.emailFailure) throw new Error('email failed'); sentEmails.push({ type: 'confirm', record: r }); },
     sendCancellationEmail: function (r) { sentEmails.push({ type: 'cancel', record: r }); },
     sendRescheduleEmail: function (a, b) { sentEmails.push({ type: 'reschedule', from: a, to: b }); },
   };
@@ -279,7 +283,7 @@ function loadBackend(opts, files) {
         insertSheet: function (name) { return (sheets[name] = makeSheet(name, [])); },
       };
     },
-    flush: function () {},
+    flush: function () { operationOrder.push('flush'); },
   };
   sandbox._setSetting = function (key, value) {
     const sheet = sheets.Settings || (sheets.Settings = makeSheet('Settings', [['key', 'value']]));

@@ -69,8 +69,8 @@ r.test('storage rejects unknown columns and propagates write failures', function
 });
 
 r.test('normal routed request initializes schema before handling the action', function () {
-  const ctx = loadBackend({ config: { SPREADSHEET_ID: 'test-sheet' }, sheets: {} }, ['SheetStore.gs', 'Schema.gs', 'Code.gs']);
-  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailableSlots' }) } }));
+  const ctx = loadBackend({ config: { SPREADSHEET_ID: 'test-sheet' }, sheets: {} }, ['SheetStore.gs', 'Schema.gs', 'Availability.gs', 'BookingService.gs', 'Code.gs']);
+  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailability' }) } }));
   assert.strictEqual(response.error, 'VALIDATION_ERROR');
   assert.strictEqual(String(ctx.SheetStore.getSetting('schema_version')), '1');
   assert.ok(ctx._sheets.Services);
@@ -81,7 +81,7 @@ r.test('routed request fails closed without exposing a newer stored schema', fun
     config: { SPREADSHEET_ID: 'test-sheet' },
     sheets: { Settings: [['key', 'value'], ['schema_version', '2']] },
   }, ['SheetStore.gs', 'Schema.gs', 'Code.gs']);
-  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailableSlots' }) } }));
+  const response = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({ action: 'getAvailability' }) } }));
   assert.strictEqual(response.error, 'INTERNAL_ERROR');
   assert.ok(!JSON.stringify(response).includes('newer than this code'));
   assert.strictEqual(ctx._sheets.Services, undefined);

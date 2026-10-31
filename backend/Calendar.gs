@@ -39,7 +39,20 @@ var CalendarGateway = (function () {
     });
     return result;
   }
-  return { listConflicts: listConflicts };
+  function createBookingEvent(data) {
+    var calendar = CalendarApp.getCalendarById(SheetStore.getSetting('booking_calendar_id'));
+    if (!calendar) throw new Error('Booking calendar unavailable');
+    var created = calendar.createEvent(data.service_name, new Date(data.start_at), new Date(data.end_at),
+      { description: 'Booking reference: ' + data.booking_id, sendInvites: false });
+    return { id: created.getId() };
+  }
+  function deleteEvent(id) {
+    var calendar = CalendarApp.getCalendarById(SheetStore.getSetting('booking_calendar_id'));
+    if (!calendar) throw new Error('Booking calendar unavailable');
+    var existing = calendar.getEventById(id);
+    if (existing) existing.deleteEvent();
+  }
+  return { listConflicts: listConflicts, createBookingEvent: createBookingEvent, deleteEvent: deleteEvent };
 })();
 
 /**

@@ -1,426 +1,51 @@
-/**
- * End-to-end tests for the real request handlers in backend/Code.gs.
- *
- * Drives handleCreateBooking / handleRescheduleBooking through the full path
- * (validation -> lock -> authoritative sheet check -> calendar check ->
- * createEvent -> sheet write -> email -> response), with only the Google-service
- * boundary stubbed. Run: node tests/backend/handlers.test.js
- *
- * The harness deliberately does NOT reflect created events back into
- * Calendar.Events.list (simulating propagation lag), so the double-booking tests
- * pass ONLY because the authoritative sheet check works.
- */
-
-const assert = require('assert');
-const { loadBackend, parseResponse } = require('./gas-harness');
-const { createRunner } = require('./_runner');
-
-const HOUR = 60 * 60 * 1000;
-const MIN = 60 * 1000;
-const CAL = 'cal-primary';
-
-const BASE_CONFIG = {
-  CALENDAR_ID: CAL,
-  OWNER_NAME: 'Jeremy Manning',
-  GITHUB_PAGES_URL: 'https://pages.example/booking',
-  AVAILABILITY_PATTERN: 'Jeremy office hours',
-  MIN_NOTICE_HOURS: '0',
-  MAX_ADVANCE_DAYS: '3650',
-  SPREADSHEET_ID: 'sheet-1',
-  TOKEN_EXPIRY_DAYS: '90',
-  CONFLICT_CALENDAR_IDS: '',
-  FREE_EVENT_PATTERNS: '',
-};
-
-function ev(summary, startMs, endMs, extra) {
-  return Object.assign({
-    summary: summary,
-    start: { dateTime: new Date(startMs).toISOString() },
-    end: { dateTime: new Date(endMs).toISOString() },
-    status: 'confirmed',
-  }, extra || {});
-}
-
-const FILES = ['Booking.gs', 'Calendar.gs', 'Token.gs', 'SheetStore.gs', 'Schema.gs', 'Code.gs'];
-
-/** Build a harness with a 2-hour availability window 48h out, seeded sheet header. */
-function makeCtx(overrides) {
-  overrides = overrides || {};
-  const winStart = Date.now() + 48 * HOUR;
-  const winEnd = winStart + 2 * HOUR;
-  const events = [ev('Jeremy office hours', winStart, winEnd)].concat(overrides.extraEvents || []);
-  const ctx = loadBackend({
-    config: Object.assign({}, BASE_CONFIG, overrides.config || {}),
-    calendarEvents: { [CAL]: events },
-    bookingRows: [],
-    lock: overrides.lock,
-    reflectCreatedEvents: false, // simulate calendar propagation lag
-  }, FILES);
-  ctx._sheet._rows = [ctx.BookingStore.HEADERS.slice()]; // header only
-  ctx._winStart = winStart;
-  ctx._winEnd = winEnd;
-  return ctx;
-}
-
-function makeFreshCtx() {
-  const winStart = Date.now() + 48 * HOUR;
-  const winEnd = winStart + 2 * HOUR;
-  const ctx = loadBackend({
-    config: BASE_CONFIG,
-    calendarEvents: { [CAL]: [ev('Jeremy office hours', winStart, winEnd)] },
-    sheets: {},
-    reflectCreatedEvents: false,
-  }, FILES);
-  ctx._winStart = winStart;
-  return ctx;
-}
-
-function bookingData(_ctx, startMs, endMs, extra) {
-  return Object.assign({
-    meetingTypeId: 'office-hours',
-    meetingTypeName: 'Office hours',
-    start: new Date(startMs).toISOString(),
-    end: new Date(endMs).toISOString(),
-    firstName: 'Sam',
-    lastName: 'Student',
-    email: 'sam@example.edu',
-    format: 'in-person',
-    location: "Jeremy's office",
-  }, extra || {});
-}
-
-const r = createRunner('handleCreateBooking / handleRescheduleBooking (end-to-end)');
-
-r.test('fresh schema booking stays readable and blocks a second booking without persisting its token', function () {
-  const ctx = makeFreshCtx();
-  ctx.ensureApplicationReady();
-  const start = new Date(ctx._winStart + 60 * MIN).toISOString();
-  const end = new Date(ctx._winStart + 90 * MIN).toISOString();
-  const token = 'secret-manage-token';
-  ctx.BookingStore.create({
-    token: token, tokenExpiresAt: new Date(Date.now() + 90 * 24 * HOUR).toISOString(),
-    status: 'confirmed', meetingTypeId: 'office-hours', meetingTypeName: 'Office hours',
-    startTime: start, endTime: end, firstName: 'Sam', lastName: 'Student',
-    email: 'sam@example.edu', createdAt: new Date().toISOString(),
-  });
-  const stored = ctx._sheets.Bookings.rows[1];
-  assert.ok(!JSON.stringify(stored).includes(token));
-  const headers = ctx._sheets.Bookings.rows[0];
-  assert.ok(/^BKG_/.test(stored[headers.indexOf('booking_id')]));
-  assert.strictEqual(stored[headers.indexOf('status')], 'CONFIRMED');
-  assert.strictEqual(stored[headers.indexOf('manage_token_hash')], ctx.TokenService.hashToken(token));
-  assert.strictEqual(ctx.BookingStore.getByToken(token).status, 'confirmed');
-  assert.strictEqual(ctx.TokenService.validateToken(token), true);
-  assert.strictEqual(ctx.BookingStore.getByToken(''), null);
-  assert.strictEqual(ctx.BookingStore.updateStatus('', 'cancelled'), false);
-  assert.ok(ctx.BookingStore.findOverlappingConfirmed(start, end, null));
-  const second = parseResponse(ctx.handleCreateBooking(bookingData(ctx, new Date(start).getTime(), new Date(end).getTime())));
-  assert.strictEqual(second.error, 'SLOT_TAKEN');
-  assert.strictEqual(ctx._createdEvents.length, 0);
-  assert.strictEqual(ctx.BookingStore.updateStatus(token, 'cancelled', { cancelledAt: new Date().toISOString() }), true);
-  assert.strictEqual(stored[headers.indexOf('status')], 'CANCELLED');
-  assert.strictEqual(ctx.BookingStore.getByToken(token).status, 'cancelled');
-  assert.strictEqual(ctx.BookingStore.findOverlappingConfirmed(start, end, null), null);
+const assert=require('assert');
+const {makeCtx,cmd}=require('./booking-service.test');
+const {parseResponse}=require('./gas-harness');
+const {createRunner}=require('./_runner');
+const r=createRunner('M1 public handlers');
+function post(ctx,data){return parseResponse(ctx.doPost({postData:{contents:JSON.stringify(data)}}));}
+r.test('lists services and availability through stable actions',()=>{
+  const ctx=makeCtx();
+  const services=post(ctx,{action:'listServices'});
+  assert.strictEqual(services.success,true); assert.strictEqual(services.services[0].service_id,'SRV_demo');
+  const slots=post(ctx,Object.assign(cmd(),{action:'getAvailability',end_at:new Date(new Date(cmd().start_at).getTime()+3600000).toISOString()}));
+  assert.strictEqual(slots.success,true); assert.strictEqual(slots.slots.length,2);
 });
-
-r.test('versioned hashed tokens do not acquire a synthetic 90-day expiry', function () {
-  const ctx = makeFreshCtx();
-  ctx.ensureApplicationReady();
-  const token = 'old-but-valid-hashed-token';
-  ctx.BookingStore.create({
-    token: token,
-    tokenExpiresAt: '2026-04-01T00:00:00Z',
-    status: 'confirmed', meetingTypeId: 'office-hours', meetingTypeName: 'Office hours',
-    startTime: new Date(ctx._winStart + 60 * MIN).toISOString(),
-    endTime: new Date(ctx._winStart + 90 * MIN).toISOString(),
-    firstName: 'Sam', lastName: 'Student', email: 'sam@example.edu',
-    createdAt: '2026-01-01T00:00:00Z',
-  });
-  const decoded = ctx.BookingStore.getByToken(token);
-  assert.strictEqual(decoded.tokenExpiresAt, '');
-  assert.strictEqual(ctx.TokenService.validateToken(token), true);
-  const headers = ctx._sheets.Bookings.rows[0];
-  assert.strictEqual(headers.indexOf('tokenExpiresAt'), -1);
-  assert.ok(!JSON.stringify(ctx._sheets.Bookings.rows[1]).includes(token));
+r.test('creates a booking and returns only public fields and the one-time token',()=>{
+  const ctx=makeCtx(); const result=post(ctx,Object.assign(cmd(),{action:'createBooking',end_at:'2099-01-01',duration_minutes:999}));
+  assert.strictEqual(result.success,true); assert.ok(result.manage_token);
+  assert.strictEqual(new Date(result.booking.end_at)-new Date(result.booking.start_at),1800000);
+  ['customer_id','calendar_event_id','manage_token_hash','customer_email_snapshot'].forEach(k=>assert.ok(!(k in result.booking)));
 });
-
-r.test('legacy token with an explicitly persisted expiry still expires', function () {
-  const ctx = makeCtx();
-  const headers = ctx.BookingStore.HEADERS;
-  const fields = { token: 'expired-legacy-token', status: 'confirmed', tokenExpiresAt: '2026-01-01T00:00:00Z' };
-  ctx._sheet._rows.push(headers.map(function (header) { return fields[header] || ''; }));
-  assert.strictEqual(ctx.TokenService.validateToken(fields.token), false);
+r.test('maps domain capacity errors and leaves Sheets authoritative after Calendar deletion',()=>{
+  const ctx=makeCtx(); const data=Object.assign(cmd({quantity:3}),{action:'createBooking'});
+  assert.strictEqual(post(ctx,data).success,true); ctx._createdEvents[0]._deleted=true;
+  assert.strictEqual(post(ctx,data).error,'INSUFFICIENT_CAPACITY');
 });
-
-r.test('two routed bookings on fresh schema cannot claim the same slot during Calendar lag', function () {
-  const ctx = makeFreshCtx();
-  const start = ctx._winStart + 60 * MIN;
-  const end = ctx._winStart + 90 * MIN;
-  function post(data) {
-    return parseResponse(ctx.doPost({ postData: { contents: JSON.stringify(Object.assign({ action: 'createBooking' }, data)) } }));
+r.test('honeypot and invalid contact values cause no booking side effects',()=>{
+  for(const extra of [{hp:'bot'},{email:'invalid'},{name:' '},{name:'a'.repeat(161)},{phone:42}]){
+    const ctx=makeCtx(); assert.strictEqual(post(ctx,Object.assign(cmd(extra),{action:'createBooking'})).error,'VALIDATION_ERROR');
+    assert.strictEqual(ctx._createdEvents.length,0); assert.strictEqual(ctx.SheetStore.readAll('Customers').length,0);
   }
-  const first = post(bookingData(ctx, start, end));
-  assert.strictEqual(first.success, true, JSON.stringify(first));
-  assert.ok(ctx.BookingStore.getByToken(first.booking.token));
-  assert.ok(!JSON.stringify(ctx._sheets.Bookings.rows[1]).includes(first.booking.token));
-  const second = post(bookingData(ctx, start, end, { email: 'second@example.edu' }));
-  assert.strictEqual(second.error, 'SLOT_TAKEN');
-  assert.strictEqual(ctx._createdEvents.length, 1);
 });
-
-r.test('fresh-schema reschedule retains Calendar location without a Sheet column', function () {
-  const ctx = makeFreshCtx();
-  const start = ctx._winStart + 15 * MIN;
-  const end = ctx._winStart + 45 * MIN;
-  const first = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify(Object.assign(
-    { action: 'createBooking' }, bookingData(ctx, start, end, { location: 'Room 42' })
-  )) } }));
-  assert.strictEqual(first.success, true, JSON.stringify(first));
-  const next = parseResponse(ctx.doPost({ postData: { contents: JSON.stringify({
-    action: 'rescheduleBooking', oldToken: first.booking.token,
-    newStart: new Date(ctx._winStart + 75 * MIN).toISOString(),
-    newEnd: new Date(ctx._winStart + 105 * MIN).toISOString(),
-  }) } }));
-  assert.strictEqual(next.success, true, JSON.stringify(next));
-  assert.strictEqual(ctx._createdEvents[1].options.location, 'Room 42');
-  assert.strictEqual(ctx._sheets.Bookings.rows[0].indexOf('location'), -1);
+r.test('unexpected exceptions never expose messages or stack traces',()=>{
+  const ctx=makeCtx(); ctx._failAppendFor.push('Bookings');
+  assert.deepStrictEqual(post(ctx,Object.assign(cmd(),{action:'createBooking'})),{success:false,error:'INTERNAL_ERROR'});
 });
-
-// --- BUG A end-to-end: an off-grid 45-min slot books successfully ---
-r.test('books an off-grid 45-min slot (the 10:30 case) through the full handler', function () {
-  const ctx = makeCtx();
-  const data = bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 105 * MIN);
-  const res = parseResponse(ctx.handleCreateBooking(data));
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-  assert.ok(res.booking && res.booking.token, 'expected a token');
-  assert.strictEqual(ctx._createdEvents.length, 1, 'one calendar event created');
-  assert.strictEqual(ctx._sheet._rows.length, 2, 'header + one booking row');
-  assert.strictEqual(ctx._sentEmails.length, 1, 'a confirmation email queued');
+r.test('rejects malformed JSON, null bodies and retired actions',()=>{
+  const ctx=makeCtx();
+  for(const data of [null,[],{action:'rescheduleBooking'},{action:'reconcile'}]) assert.strictEqual(post(ctx,data).error,'VALIDATION_ERROR');
+  assert.strictEqual(parseResponse(ctx.doPost({postData:{contents:'{'}})).error,'VALIDATION_ERROR');
 });
-
-// --- BUG B end-to-end: second booking of the same slot is rejected ---
-r.test('rejects a second booking of the same slot (sheet check beats calendar lag)', function () {
-  const ctx = makeCtx();
-  const start = ctx._winStart + 60 * MIN, end = ctx._winStart + 105 * MIN;
-  const first = parseResponse(ctx.handleCreateBooking(bookingData(ctx, start, end)));
-  assert.strictEqual(first.success, true);
-
-  // Calendar.Events.list still does NOT show the new event (lag). Only the sheet does.
-  const second = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, start, end, { firstName: 'Alex', email: 'alex@example.edu' })));
-  assert.strictEqual(second.success, false, 'second identical booking must fail');
-  assert.strictEqual(second.error, 'SLOT_TAKEN');
-  assert.strictEqual(ctx._createdEvents.length, 1, 'no second calendar event');
-  assert.strictEqual(ctx._sheet._rows.length, 2, 'no second booking row');
+r.test('maps lock denial and service inactivity to stable errors',()=>{
+  const ctx=makeCtx(); ctx.SheetStore.updateById('Services','service_id','SRV_demo',{active:false});
+  assert.strictEqual(post(ctx,Object.assign(cmd(),{action:'createBooking'})).error,'SERVICE_INACTIVE');
+  ctx.Schema.ensureCurrent=()=>{}; ctx.LockService.getScriptLock=()=>({tryLock:()=>false});
+  assert.strictEqual(post(ctx,Object.assign(cmd(),{action:'createBooking'})).error,'LOCK_TIMEOUT');
 });
-
-// --- Overlapping (not identical) second booking is also rejected ---
-r.test('rejects a second booking that overlaps an existing one', function () {
-  const ctx = makeCtx();
-  const s1 = ctx._winStart + 30 * MIN, e1 = ctx._winStart + 75 * MIN; // 45 min
-  assert.strictEqual(parseResponse(ctx.handleCreateBooking(bookingData(ctx, s1, e1))).success, true);
-  const s2 = ctx._winStart + 60 * MIN, e2 = ctx._winStart + 90 * MIN; // overlaps [60,75)
-  const res = parseResponse(ctx.handleCreateBooking(bookingData(ctx, s2, e2)));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
+r.test('does not trust caller clock or booking exclusion to bypass capacity',()=>{
+  const ctx=makeCtx(); const first=post(ctx,Object.assign(cmd({quantity:3}),{action:'createBooking'}));
+  const result=post(ctx,Object.assign(cmd(),{action:'createBooking',exclude_booking_id:first.booking.booking_id,now:'1900-01-01T00:00:00Z'}));
+  assert.strictEqual(result.error,'INSUFFICIENT_CAPACITY');
 });
-
-// --- Calendar conflict (pre-existing busy meeting) blocks a booking ---
-r.test('rejects a booking overlapping a pre-existing busy calendar event', function () {
-  const winStart = Date.now() + 48 * HOUR;
-  const ctx = makeCtx({ extraEvents: [ev('Faculty meeting', winStart + 60 * MIN, winStart + 90 * MIN)] });
-  const res = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 105 * MIN)));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
-  assert.strictEqual(ctx._createdEvents.length, 0);
-});
-
-// --- Booking outside any availability window is rejected ---
-r.test('rejects a booking outside the availability window', function () {
-  const ctx = makeCtx();
-  const res = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winEnd + 2 * HOUR, ctx._winEnd + 3 * HOUR)));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
-});
-
-// --- Min-notice window is enforced ---
-r.test('rejects a booking inside the min-notice window', function () {
-  const ctx = makeCtx({ config: { MIN_NOTICE_HOURS: '72' } }); // window is only 48h out
-  const res = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 105 * MIN)));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
-});
-
-// --- Validation + lock behaviour ---
-r.test('rejects a booking missing a required field', function () {
-  const ctx = makeCtx();
-  const data = bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 105 * MIN);
-  delete data.email;
-  const res = parseResponse(ctx.handleCreateBooking(data));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'VALIDATION_ERROR');
-});
-
-r.test('returns LOCK_TIMEOUT when the lock cannot be acquired', function () {
-  const ctx = makeCtx({ lock: false });
-  const res = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 105 * MIN)));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'LOCK_TIMEOUT');
-  assert.strictEqual(ctx._sheet._rows.length, 1, 'nothing written without the lock');
-});
-
-// --- Reschedule flow ---
-r.test('reschedules a booking to a new free slot', function () {
-  const ctx = makeCtx();
-  const first = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 15 * MIN, ctx._winStart + 45 * MIN)));
-  assert.strictEqual(first.success, true);
-  const oldToken = first.booking.token;
-
-  const res = parseResponse(ctx.handleRescheduleBooking({
-    oldToken: oldToken,
-    newStart: new Date(ctx._winStart + 75 * MIN).toISOString(),
-    newEnd: new Date(ctx._winStart + 105 * MIN).toISOString(),
-  }));
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-  assert.notStrictEqual(res.booking.token, oldToken, 'a new token is issued');
-
-  const oldRow = ctx.BookingStore.getByToken(oldToken);
-  assert.strictEqual(oldRow.status, 'rescheduled', 'old booking marked rescheduled');
-  const newRow = ctx.BookingStore.getByToken(res.booking.token);
-  assert.strictEqual(newRow.status, 'confirmed');
-});
-
-r.test('rejects a reschedule onto another confirmed booking', function () {
-  const ctx = makeCtx();
-  // Booking A occupies [75,105); we will try to move booking B onto it.
-  parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 75 * MIN, ctx._winStart + 105 * MIN,
-      { firstName: 'Occupant', email: 'occ@example.edu' })));
-  const b = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 15 * MIN, ctx._winStart + 45 * MIN)));
-  assert.strictEqual(b.success, true);
-
-  const res = parseResponse(ctx.handleRescheduleBooking({
-    oldToken: b.booking.token,
-    newStart: new Date(ctx._winStart + 75 * MIN).toISOString(),
-    newEnd: new Date(ctx._winStart + 105 * MIN).toISOString(),
-  }));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
-});
-
-// Backdate every booking row's createdAt so the ghost guard's freshness grace
-// (which trusts recent rows to defeat calendar propagation lag) no longer applies.
-function ageAllRows(ctx, minutesAgo) {
-  const ci = ctx.BookingStore.HEADERS.indexOf('createdAt');
-  const old = new Date(Date.now() - minutesAgo * 60 * MIN).toISOString();
-  for (let i = 1; i < ctx._sheet._rows.length; i++) ctx._sheet._rows[i][ci] = old;
-}
-
-// --- Ghost row: an OLD confirmed booking whose calendar event was deleted
-//     out-of-band must NOT block the slot forever (this was a live SLOT_TAKEN bug). ---
-r.test('an old slot frees up when its confirmed event is deleted directly on the calendar', function () {
-  const ctx = makeCtx();
-  const start = ctx._winStart + 60 * MIN, end = ctx._winStart + 90 * MIN;
-  const first = parseResponse(ctx.handleCreateBooking(bookingData(ctx, start, end)));
-  assert.strictEqual(first.success, true);
-  assert.strictEqual(ctx._createdEvents.length, 1);
-
-  // Owner deletes the meeting straight from Google Calendar (not via the cancel
-  // link): the event is gone but the sheet row still says 'confirmed'. The row is
-  // old (not a just-created booking that could be masking calendar lag).
-  ctx._createdEvents[0]._deleted = true;
-  ageAllRows(ctx, 60);
-
-  const second = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, start, end, { firstName: 'Alex', email: 'alex@example.edu' })));
-  assert.strictEqual(second.success, true, 'stale ghost row must not block: ' + JSON.stringify(second));
-});
-
-r.test('a FRESH row whose event is missing STILL blocks (defeats calendar-lag double-booking)', function () {
-  const ctx = makeCtx();
-  const start = ctx._winStart + 60 * MIN, end = ctx._winStart + 90 * MIN;
-  assert.strictEqual(parseResponse(ctx.handleCreateBooking(bookingData(ctx, start, end))).success, true);
-  // Simulate the race: the just-created event isn't visible via getEventById yet.
-  ctx._createdEvents[0]._deleted = true; // stands in for "not yet readable"
-  // Row is fresh (createdAt = now), so it must be trusted, NOT treated as a ghost.
-  const second = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, start, end, { firstName: 'Alex', email: 'alex@example.edu' })));
-  assert.strictEqual(second.success, false, 'a fresh row must never be treated as a ghost');
-  assert.strictEqual(second.error, 'SLOT_TAKEN');
-});
-
-r.test('a still-live confirmed booking DOES block the slot (double-booking guard intact)', function () {
-  const ctx = makeCtx();
-  const start = ctx._winStart + 60 * MIN, end = ctx._winStart + 90 * MIN;
-  assert.strictEqual(parseResponse(ctx.handleCreateBooking(bookingData(ctx, start, end))).success, true);
-  ageAllRows(ctx, 60); // even when old, a row whose event still exists is a real conflict
-  const second = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, start, end, { firstName: 'Alex', email: 'alex@example.edu' })));
-  assert.strictEqual(second.success, false);
-  assert.strictEqual(second.error, 'SLOT_TAKEN');
-});
-
-r.test('an old confirmed row with a blank eventId fails closed (still blocks the slot)', function () {
-  const ctx = makeCtx();
-  const H = ctx.BookingStore.HEADERS;
-  const start = ctx._winStart + 60 * MIN, end = ctx._winStart + 90 * MIN;
-  // Seed an old confirmed row with NO eventId (e.g. a schema-drift artifact).
-  const spec = {
-    token: 'blank-evt', eventId: '', status: 'confirmed',
-    startTime: new Date(start).toISOString(), endTime: new Date(end).toISOString(),
-    createdAt: new Date(Date.now() - 60 * 60 * MIN).toISOString(),
-  };
-  ctx._sheet._rows.push(H.map(function (h) { return spec[h] !== undefined ? spec[h] : ''; }));
-  const res = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, start, end, { firstName: 'Alex', email: 'alex@example.edu' })));
-  assert.strictEqual(res.success, false, 'unverifiable row must not be treated as a ghost');
-  assert.strictEqual(res.error, 'SLOT_TAKEN');
-});
-
-r.test('reschedule is not blocked by an OLD ghost row at the target slot', function () {
-  const ctx = makeCtx();
-  const occ = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 75 * MIN, ctx._winStart + 105 * MIN,
-      { firstName: 'Occ', email: 'occ@example.edu' })));
-  assert.strictEqual(occ.success, true);
-  ctx._createdEvents[0]._deleted = true; // occupant's event removed on the calendar
-
-  const b = parseResponse(ctx.handleCreateBooking(
-    bookingData(ctx, ctx._winStart + 15 * MIN, ctx._winStart + 45 * MIN)));
-  assert.strictEqual(b.success, true);
-  ageAllRows(ctx, 60); // both rows now old; the occupant is a genuine ghost
-
-  const res = parseResponse(ctx.handleRescheduleBooking({
-    oldToken: b.booking.token,
-    newStart: new Date(ctx._winStart + 75 * MIN).toISOString(),
-    newEnd: new Date(ctx._winStart + 105 * MIN).toISOString(),
-  }));
-  assert.strictEqual(res.success, true, 'reschedule onto a freed (ghost) slot should work: ' + JSON.stringify(res));
-});
-
-// --- Honeypot: a filled hidden field marks the request as a bot; reject it
-//     without creating an event, writing a row, or sending email. ---
-r.test('rejects a booking whose honeypot field is filled (bot submission)', function () {
-  const ctx = makeCtx();
-  const data = bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 90 * MIN, { hp: 'http://spam.example' });
-  const res = parseResponse(ctx.handleCreateBooking(data));
-  assert.strictEqual(res.success, false);
-  assert.strictEqual(ctx._createdEvents.length, 0, 'no event for a bot submission');
-  assert.strictEqual(ctx._sheet._rows.length, 1, 'no booking row for a bot submission');
-  assert.strictEqual(ctx._sentEmails.length, 0, 'no email for a bot submission');
-});
-
-r.test('a booking with an empty honeypot field books normally', function () {
-  const ctx = makeCtx();
-  const data = bookingData(ctx, ctx._winStart + 60 * MIN, ctx._winStart + 90 * MIN, { hp: '' });
-  const res = parseResponse(ctx.handleCreateBooking(data));
-  assert.strictEqual(res.success, true, JSON.stringify(res));
-});
-
-process.exit(r.done() === 0 ? 0 : 1);
+process.exit(r.done()===0?0:1);
