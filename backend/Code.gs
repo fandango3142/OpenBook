@@ -86,6 +86,30 @@ function handleRequestReschedule(data) {
     return jsonResponse({ success: true, booking: result.booking });
   } catch (err) { return publicError(err); }
 }
+
+/** Installs the operational menu whenever the bound spreadsheet is opened. */
+function onOpen() {
+  SpreadsheetApp.getUi().createMenu('OpenBook')
+    .addItem('Dashboard', 'showDashboard')
+    .addItem('Run setup / migrations', 'runMigrationsFromMenu')
+    .addToUi();
+}
+
+/** Authentication is checked server-side; every data RPC checks again as well. */
+function showDashboard() {
+  DashboardApi.authorize();
+  var output = HtmlService.createHtmlOutputFromFile('Dashboard')
+    .setWidth(1080).setHeight(760);
+  SpreadsheetApp.getUi().showModalDialog(output, 'OpenBook Dashboard');
+}
+
+/** Explicitly reruns the idempotent schema migration for authorized operators. */
+function runMigrationsFromMenu() {
+  DashboardApi.authorize();
+  var version = Schema.ensureCurrent();
+  SpreadsheetApp.getUi().alert('OpenBook setup is current (schema version ' + version + ').');
+  return version;
+}
 function rateBump(cache, key, limit, windowSec) {
   var n = parseInt(cache.get(key) || '0', 10);
   if (n >= limit) return false;

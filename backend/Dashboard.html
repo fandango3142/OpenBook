@@ -1,0 +1,323 @@
+<!doctype html>
+<html>
+<head>
+  <base target="_top">
+  <meta charset="utf-8">
+  <style>
+    :root { color-scheme: light; font: 14px/1.45 Arial, sans-serif; color: #202124; background: #f7f8fa; }
+    * { box-sizing: border-box; }
+    body { margin: 0; padding: 24px; }
+    h1 { margin: 0 0 4px; font-size: 24px; }
+    h2 { margin: 0 0 12px; font-size: 17px; }
+    h3 { margin: 18px 0 8px; font-size: 15px; }
+    .subtle, .empty { color: #5f6368; }
+    .layout { display: grid; grid-template-columns: minmax(260px, .8fr) minmax(400px, 1.2fr); gap: 16px; align-items: start; }
+    .panel { background: #fff; border: 1px solid #dadce0; border-radius: 8px; padding: 16px; margin-top: 16px; }
+    .column .panel { margin-top: 16px; }
+    .booking-list { display: grid; gap: 8px; }
+    .booking-row { text-align: left; width: 100%; display: grid; gap: 2px; padding: 10px 12px; border: 1px solid #dadce0; border-radius: 6px; background: #fff; cursor: pointer; color: inherit; }
+    .booking-row:hover, .booking-row:focus { border-color: #1a73e8; outline: 2px solid #d2e3fc; }
+    .booking-row strong { font-size: 14px; }
+    .status { color: #5f6368; font-size: 12px; }
+    label { display: block; margin: 10px 0 4px; font-weight: 600; }
+    input, select { width: 100%; min-height: 36px; padding: 7px 9px; border: 1px solid #bdc1c6; border-radius: 4px; font: inherit; background: white; }
+    button.primary, button.action { border: 0; border-radius: 4px; padding: 9px 12px; margin: 10px 8px 0 0; background: #1a73e8; color: white; cursor: pointer; font: inherit; }
+    button.secondary { border: 1px solid #dadce0; border-radius: 4px; padding: 8px 11px; margin: 10px 8px 0 0; background: white; color: #202124; cursor: pointer; font: inherit; }
+    button:focus, input:focus, select:focus { outline: 2px solid #8ab4f8; outline-offset: 1px; }
+    form button { margin-top: 14px; }
+    [hidden] { display: none !important; }
+    .message { min-height: 20px; margin-top: 8px; color: #137333; }
+    .error { color: #b3261e; }
+    .detail-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 5px 14px; }
+    .detail-grid p { margin: 2px 0; overflow-wrap: anywhere; }
+    .detail-grid .wide { grid-column: 1 / -1; }
+    @media (max-width: 780px) { body { padding: 14px; } .layout { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>OpenBook</h1>
+    <div class="subtle">Booking operations · times shown in <span id="business-timezone">business timezone</span></div>
+    <div id="dashboard-message" class="message" role="status" aria-live="polite"></div>
+  </header>
+  <div class="layout">
+    <div class="column">
+      <section class="panel" aria-labelledby="today-heading">
+        <h2 id="today-heading">Today</h2>
+        <div id="today-bookings" class="booking-list"><p class="empty">Loading…</p></div>
+      </section>
+      <section class="panel" aria-labelledby="upcoming-heading">
+        <h2 id="upcoming-heading">Upcoming</h2>
+        <div id="upcoming-bookings" class="booking-list"><p class="empty">Loading…</p></div>
+      </section>
+    </div>
+    <div class="column">
+      <section id="booking-detail" class="panel" aria-labelledby="detail-heading">
+        <h2 id="detail-heading">Booking details</h2>
+        <p class="empty">Select a booking to see its details and available actions.</p>
+      </section>
+      <section class="panel" aria-labelledby="manual-heading">
+        <h2 id="manual-heading">Create a booking</h2>
+        <form id="manual-booking-form">
+          <label for="manual-service">Service</label><select id="manual-service" required></select>
+          <label for="manual-start">Start time</label><input id="manual-start" type="datetime-local" required>
+          <label for="manual-name">Customer name</label><input id="manual-name" autocomplete="name" maxlength="160" required>
+          <label for="manual-email">Customer email</label><input id="manual-email" type="email" autocomplete="email" maxlength="254" required>
+          <label for="manual-phone">Phone (optional)</label><input id="manual-phone" type="tel" maxlength="40">
+          <label for="manual-quantity">Quantity</label><input id="manual-quantity" type="number" min="1" value="1" required>
+          <button class="primary" type="submit">Create booking</button>
+          <div id="manual-result" class="message" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+      <section class="panel" aria-labelledby="exception-heading">
+        <h2 id="exception-heading">Block time</h2>
+        <form id="exception-form">
+          <label for="exception-service">Applies to</label><select id="exception-service"><option value="">All services</option></select>
+          <label for="exception-start">Start time</label><input id="exception-start" type="datetime-local" required>
+          <label for="exception-end">End time</label><input id="exception-end" type="datetime-local" required>
+          <label for="exception-reason">Reason (optional)</label><input id="exception-reason" maxlength="500">
+          <button class="primary" type="submit">Block time</button>
+          <div id="exception-result" class="message" role="status" aria-live="polite"></div>
+        </form>
+      </section>
+    </div>
+  </div>
+<script>
+(function () {
+  'use strict';
+  var bookings = [];
+  var services = [];
+  var timezone = 'UTC';
+  var selectedId = '';
+  var ACTIVE = ['CONFIRMED', 'CANCELLATION_REQUESTED', 'RESCHEDULE_REQUESTED'];
+  var TERMINAL = ['CANCELLED', 'COMPLETED', 'NO_SHOW'];
+
+  function rpc(method, args) {
+    return new Promise(function (resolve, reject) {
+      try {
+        var runner = google.script.run.withSuccessHandler(resolve).withFailureHandler(reject);
+        runner[method].apply(runner, args || []);
+      } catch (error) { reject(error); }
+    });
+  }
+  function showMessage(target, message, isError) {
+    var el = document.getElementById(target);
+    el.textContent = message || '';
+    el.classList.toggle('error', !!isError);
+  }
+  function errorText(error) {
+    return error && error.message ? error.message : String(error || 'Request failed');
+  }
+  function partsAt(instant, zone) {
+    var parts = new Intl.DateTimeFormat('en-CA', { timeZone: zone, year: 'numeric', month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', second: '2-digit', hourCycle: 'h23' }).formatToParts(instant);
+    var result = {};
+    parts.forEach(function (part) { if (part.type !== 'literal') result[part.type] = part.value; });
+    return result;
+  }
+  function dateKey(instant) {
+    var p = partsAt(instant, timezone);
+    return p.year + '-' + p.month + '-' + p.day;
+  }
+  function localInputToIso(value) {
+    var match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})$/.exec(value || '');
+    if (!match) throw new Error('Choose a valid local date and time.');
+    var target = match[1] + '-' + match[2] + '-' + match[3] + 'T' + match[4] + ':' + match[5] + ':00';
+    var base = Date.UTC(Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]));
+    if (new Date(base).toISOString().slice(0, 16) !== target.slice(0, 16)) throw new Error('Choose a valid local date and time.');
+    var offsets = {};
+    for (var hours = -48; hours <= 48; hours += 6) {
+      var probe = base + hours * 3600000;
+      var p = partsAt(new Date(probe), timezone);
+      var rendered = p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute + ':' + p.second;
+      offsets[Date.parse(rendered + 'Z') - probe] = true;
+    }
+    var candidates = Object.keys(offsets).map(function (offset) { return base - Number(offset); }).filter(function (candidate) {
+      var p = partsAt(new Date(candidate), timezone);
+      return p.year + '-' + p.month + '-' + p.day + 'T' + p.hour + ':' + p.minute + ':' + p.second === target;
+    }).sort(function (a, b) { return a - b; });
+    if (!candidates.length) throw new Error('That local time does not exist in ' + timezone + '.');
+    if (candidates.length > 1) throw new Error('That local time is ambiguous in ' + timezone + '. Choose a different time.');
+    return new Date(candidates[0]).toISOString();
+  }
+  function displayDate(iso) {
+    return new Intl.DateTimeFormat(undefined, { timeZone: timezone, dateStyle: 'medium', timeStyle: 'short' }).format(new Date(iso));
+  }
+  function localToday() { return dateKey(new Date()); }
+  function active(row) { return ACTIVE.indexOf(row.status) !== -1; }
+  function makeButton(label, action, bookingId, secondary) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = secondary ? 'secondary' : 'action';
+    button.dataset.action = action;
+    button.dataset.bookingId = bookingId;
+    button.textContent = label;
+    return button;
+  }
+  function bookingRow(row) {
+    var button = document.createElement('button');
+    button.type = 'button';
+    button.className = 'booking-row';
+    button.dataset.bookingId = row.booking_id;
+    var name = document.createElement('strong');
+    name.textContent = row.customer_name || 'Customer';
+    var service = document.createElement('span');
+    service.textContent = row.service_name || row.service_id || 'Service';
+    var date = document.createElement('span');
+    date.textContent = displayDate(row.start_at);
+    var status = document.createElement('span');
+    status.className = 'status';
+    status.textContent = row.status;
+    button.appendChild(name); button.appendChild(service); button.appendChild(date); button.appendChild(status);
+    button.addEventListener('click', function () { selectedId = row.booking_id; renderDetail(); });
+    return button;
+  }
+  function renderList(id, rows) {
+    var container = document.getElementById(id);
+    container.textContent = '';
+    if (!rows.length) {
+      var empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'No bookings'; container.appendChild(empty); return;
+    }
+    rows.forEach(function (row) { container.appendChild(bookingRow(row)); });
+  }
+  function detailLine(label, value, wide) {
+    var p = document.createElement('p');
+    if (wide) p.className = 'wide';
+    var strong = document.createElement('strong'); strong.textContent = label + ': ';
+    p.appendChild(strong); p.appendChild(document.createTextNode(value || '—'));
+    return p;
+  }
+  function renderDetail() {
+    var root = document.getElementById('booking-detail');
+    root.textContent = '';
+    var heading = document.createElement('h2'); heading.id = 'detail-heading'; heading.textContent = 'Booking details'; root.appendChild(heading);
+    var booking = bookings.find(function (row) { return row.booking_id === selectedId; });
+    if (!booking) { var empty = document.createElement('p'); empty.className = 'empty'; empty.textContent = 'Select a booking to see its details and available actions.'; root.appendChild(empty); return; }
+    var grid = document.createElement('div'); grid.className = 'detail-grid';
+    grid.appendChild(detailLine('Customer', booking.customer_name));
+    grid.appendChild(detailLine('Email', booking.customer_email));
+    grid.appendChild(detailLine('Service', booking.service_name || booking.service_id));
+    grid.appendChild(detailLine('Status', booking.status));
+    grid.appendChild(detailLine('Start', displayDate(booking.start_at), true));
+    grid.appendChild(detailLine('End', displayDate(booking.end_at), true));
+    grid.appendChild(detailLine('Quantity', String(booking.quantity), true));
+    grid.appendChild(detailLine('Booking ID', booking.booking_id, true));
+    root.appendChild(grid);
+    if (booking.status === 'CONFIRMED') {
+      root.appendChild(makeButton('Reschedule', 'open-reschedule', booking.booking_id, true));
+      root.appendChild(makeButton('Cancel booking', 'cancel-booking', booking.booking_id, true));
+    } else if (booking.status === 'RESCHEDULE_REQUESTED') {
+      root.appendChild(makeButton('Reschedule', 'open-reschedule', booking.booking_id, true));
+    } else if (booking.status === 'CANCELLATION_REQUESTED') {
+      root.appendChild(makeButton('Approve cancellation', 'approve-cancellation', booking.booking_id, false));
+      root.appendChild(makeButton('Reject cancellation', 'reject-cancellation', booking.booking_id, true));
+    }
+    if (ACTIVE.indexOf(booking.status) !== -1 && Date.now() >= new Date(booking.start_at).getTime()) {
+      root.appendChild(makeButton('Mark completed', 'mark-completed', booking.booking_id, true));
+      root.appendChild(makeButton('Mark no-show', 'mark-no-show', booking.booking_id, true));
+    }
+    if (!TERMINAL.includes(booking.status)) {
+      var form = document.createElement('form'); form.id = 'reschedule-form'; form.hidden = true;
+      var label = document.createElement('label'); label.htmlFor = 'reschedule-start'; label.textContent = 'New start time'; form.appendChild(label);
+      var input = document.createElement('input'); input.id = 'reschedule-start'; input.type = 'datetime-local'; input.required = true; form.appendChild(input);
+      var submit = document.createElement('button'); submit.type = 'submit'; submit.className = 'primary'; submit.textContent = 'Save new time'; form.appendChild(submit);
+      form.addEventListener('submit', function (event) {
+        event.preventDefault();
+        var start;
+        try { start = localInputToIso(input.value); } catch (error) { showMessage('dashboard-message', errorText(error), true); return; }
+        runMutation('rescheduleBooking', [booking.booking_id, { start_at: start }]);
+      });
+      root.appendChild(form);
+    }
+  }
+  function fillServices() {
+    ['manual-service', 'exception-service'].forEach(function (id) {
+      var select = document.getElementById(id);
+      var preserve = select.value;
+      if (id === 'exception-service') select.textContent = '';
+      else select.textContent = '';
+      if (id === 'exception-service') {
+        var all = document.createElement('option'); all.value = ''; all.textContent = 'All services'; select.appendChild(all);
+      }
+      services.forEach(function (service) {
+        var option = document.createElement('option'); option.value = service.service_id; option.textContent = service.name; select.appendChild(option);
+      });
+      if (preserve) select.value = preserve;
+    });
+  }
+  function render() {
+    document.getElementById('business-timezone').textContent = timezone;
+    var today = localToday();
+    var ordered = bookings.slice().sort(function (a, b) { return String(a.start_at).localeCompare(String(b.start_at)); });
+    renderList('today-bookings', ordered.filter(function (row) { return dateKey(new Date(row.start_at)) === today; }));
+    renderList('upcoming-bookings', ordered.filter(function (row) { return dateKey(new Date(row.start_at)) > today && active(row); }));
+    fillServices();
+    renderDetail();
+  }
+  function loadData() {
+    return Promise.all([rpc('listBookings'), rpc('listServices'), rpc('getBusinessTimezone')]).then(function (values) {
+      bookings = values[0] || []; services = values[1] || []; timezone = values[2] || 'UTC';
+      render();
+    });
+  }
+  function runMutation(method, args, onSuccess) {
+    showMessage('dashboard-message', 'Saving…', false);
+    return rpc(method, args).then(function (value) {
+      showMessage('dashboard-message', 'Saved.', false);
+      if (onSuccess) onSuccess(value);
+      return loadData();
+    }).catch(function (error) { showMessage('dashboard-message', errorText(error), true); });
+  }
+  function init() {
+    document.getElementById('manual-booking-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      var command;
+      try {
+        command = { service_id: document.getElementById('manual-service').value,
+          start_at: localInputToIso(document.getElementById('manual-start').value),
+          quantity: Number(document.getElementById('manual-quantity').value),
+          customer: { name: document.getElementById('manual-name').value.trim(),
+            email: document.getElementById('manual-email').value.trim(), phone: document.getElementById('manual-phone').value.trim() } };
+        if (!command.service_id || !Number.isSafeInteger(command.quantity) || command.quantity < 1) throw new Error('Choose a service and a valid quantity.');
+      } catch (error) { showMessage('manual-result', errorText(error), true); return; }
+      showMessage('manual-result', 'Creating booking…', false);
+      rpc('createManualBooking', [command]).then(function (result) {
+        showMessage('manual-result', 'Booking created: ' + result.booking.booking_id, false);
+        return loadData();
+      }).catch(function (error) { showMessage('manual-result', errorText(error), true); });
+    });
+    document.getElementById('exception-form').addEventListener('submit', function (event) {
+      event.preventDefault();
+      var command;
+      try {
+        command = { service_id: document.getElementById('exception-service').value,
+          start_at: localInputToIso(document.getElementById('exception-start').value),
+          end_at: localInputToIso(document.getElementById('exception-end').value),
+          reason: document.getElementById('exception-reason').value.trim() };
+        if (new Date(command.start_at) >= new Date(command.end_at)) throw new Error('End time must be after start time.');
+      } catch (error) { showMessage('exception-result', errorText(error), true); return; }
+      showMessage('exception-result', 'Saving blocked time…', false);
+      rpc('createAvailabilityException', [command]).then(function (result) {
+        var ids = (result.affected_bookings || []).map(function (row) { return row.booking_id; });
+        showMessage('exception-result', 'Time blocked. ' + (ids.length ? 'Overlapping bookings: ' + ids.join(', ') : 'No active bookings overlap.'), false);
+        return loadData();
+      }).catch(function (error) { showMessage('exception-result', errorText(error), true); });
+    });
+    document.getElementById('booking-detail').addEventListener('click', function (event) {
+      var button = event.target.closest('button[data-action]');
+      if (!button) return;
+      var id = button.dataset.bookingId;
+      var action = button.dataset.action;
+      if (action === 'open-reschedule') { document.getElementById('reschedule-form').hidden = false; return; }
+      var operations = { 'cancel-booking': 'cancelBooking', 'approve-cancellation': 'approveCancellation',
+        'reject-cancellation': 'rejectCancellation', 'mark-completed': 'markCompleted', 'mark-no-show': 'markNoShow' };
+      if (operations[action]) runMutation(operations[action], [id]);
+    });
+    return loadData().catch(function (error) { showMessage('dashboard-message', errorText(error), true); });
+  }
+
+  window.OpenBookDashboard = { init: init, render: render, loadData: loadData,
+    toBusinessInstant: localInputToIso };
+})();
+</script>
+</body>
+</html>
