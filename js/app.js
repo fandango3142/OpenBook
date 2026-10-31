@@ -121,7 +121,7 @@ var App = (function () {
   function renderSuccess(booking, formData) {
     const container = document.getElementById('confirmation-content');
     container.textContent = '';
-    const heading = document.createElement('h2'); heading.textContent = 'Booking confirmed'; container.appendChild(heading);
+    const heading = document.createElement('h2'); heading.id = 'confirmation-heading'; heading.textContent = 'Booking confirmed'; container.appendChild(heading);
     const summary = document.createElement('p');
     const when = booking && booking.start_at ? booking.start_at : _selectedSlot.start_at;
     const zone = ((ConfigLoader.getConfig() || {}).settings || {}).business_timezone || 'UTC';

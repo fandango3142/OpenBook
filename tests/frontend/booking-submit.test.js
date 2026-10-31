@@ -4,6 +4,7 @@ function setupDOM() {
   document.body.textContent = '';
   for (let i = 1; i <= 5; i++) {
     const section = document.createElement('section'); section.id = `step-${i}`; section.className = 'step-content';
+    if (i === 5) section.setAttribute('aria-labelledby', 'confirmation-heading');
     document.body.appendChild(section);
   }
   const indicator = document.createElement('div'); indicator.className = 'step-indicator';
@@ -43,6 +44,14 @@ describe('public booking payload and stale availability', () => {
       service_id: 'consult', start_at: '2030-01-01T10:00:00.000Z', quantity: 2,
       customer: { name: 'Jane Doe', email: 'jane@example.com', phone: '' }, hp: '',
     });
+  });
+
+  test('successful confirmation has the heading referenced by its section label', async () => {
+    App.submitBooking(global.BookingForm.extractFormData()); await flush();
+    const section = document.getElementById('step-5');
+    const heading = document.querySelector('#confirmation-content h2');
+    expect(heading.id).toBe('confirmation-heading');
+    expect(section.getAttribute('aria-labelledby')).toBe(heading.id);
   });
 
   test.each(['SLOT_UNAVAILABLE', 'INSUFFICIENT_CAPACITY'])('%s returns to slot selection and refreshes fresh availability', async (code) => {
