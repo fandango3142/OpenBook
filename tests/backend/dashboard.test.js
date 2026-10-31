@@ -1,4 +1,6 @@
 const assert = require('assert');
+const fs = require('fs');
+const path = require('path');
 const { loadBackend } = require('./gas-harness');
 const { installFormatDate } = require('./availability-fixture');
 const { createRunner } = require('./_runner');
@@ -20,6 +22,18 @@ function makeCtx(opts = {}) {
   ctx._activeEmail = 'owner@example.com';
   return ctx;
 }
+
+r.test('every google.script.run dashboard RPC is exported as a top-level GAS function', () => {
+  const ctx = makeCtx();
+  const html = fs.readFileSync(path.join(__dirname, '..', '..', 'backend', 'Dashboard.html'), 'utf8');
+  const rpcNames = ['listBookings','listServices','getBusinessTimezone','createManualBooking',
+    'createAvailabilityException','rescheduleBooking','cancelBooking','approveCancellation',
+    'rejectCancellation','markCompleted','markNoShow'];
+  rpcNames.forEach(name => {
+    assert.ok(html.includes("'" + name + "'"), 'dashboard HTML does not call ' + name);
+    assert.strictEqual(typeof ctx[name], 'function', name + ' must be a global Apps Script RPC');
+  });
+});
 
 r.test('dashboard read fails closed before reading booking or customer data when identity is blank', () => {
   const ctx = makeCtx();

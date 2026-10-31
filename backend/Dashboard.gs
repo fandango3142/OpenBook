@@ -109,3 +109,17 @@ var DashboardApi = (function () {
     markCompleted: markCompleted, markNoShow: markNoShow, listServices: listServices,
     getBusinessTimezone: getBusinessTimezone, createAvailabilityException: createAvailabilityException };
 })();
+
+// Apps Script's google.script.run bridge only invokes top-level server functions.
+// Keep these thin adapters so every RPC still passes through DashboardApi's auth checks.
+function listBookings() { return DashboardApi.listBookings(); }
+function listServices() { return DashboardApi.listServices(); }
+function getBusinessTimezone() { return DashboardApi.getBusinessTimezone(); }
+function createManualBooking(command) { return DashboardApi.createManualBooking(command); }
+function rescheduleBooking(bookingId, replacement) { return DashboardApi.rescheduleBooking(bookingId, replacement); }
+function cancelBooking(bookingId) { return DashboardApi.cancelBooking(bookingId); }
+function approveCancellation(bookingId) { return DashboardApi.approveCancellation(bookingId); }
+function rejectCancellation(bookingId) { return DashboardApi.rejectCancellation(bookingId); }
+function markCompleted(bookingId) { return DashboardApi.markCompleted(bookingId); }
+function markNoShow(bookingId) { return DashboardApi.markNoShow(bookingId); }
+function createAvailabilityException(command) { return DashboardApi.createAvailabilityException(command); }
