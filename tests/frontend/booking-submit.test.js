@@ -1,16 +1,19 @@
 function flush() { return new Promise((resolve) => setTimeout(resolve, 0)); }
+const fs = require('fs');
+const path = require('path');
 
 function setupDOM() {
   document.body.textContent = '';
   for (let i = 1; i <= 5; i++) {
     const section = document.createElement('section'); section.id = `step-${i}`; section.className = 'step-content';
     if (i === 5) section.setAttribute('aria-labelledby', 'confirmation-heading');
+    if (i === 5) { const content = document.createElement('div'); content.id = 'confirmation-content'; section.appendChild(content); }
     document.body.appendChild(section);
   }
   const indicator = document.createElement('div'); indicator.className = 'step-indicator';
   for (let i = 1; i <= 5; i++) { const el = document.createElement('span'); el.className = 'step'; el.dataset.step = i; indicator.appendChild(el); }
   document.body.appendChild(indicator);
-    ['loading', 'error-banner', 'services', 'selected-service-info', 'selected-slot-info', 'confirmation-content', 'review-summary', 'booking-form', 'name', 'email', 'phone', 'quantity', 'hp', 'place-booking', 'back-to-services', 'back-to-slots', 'calendar-container'].forEach((id) => {
+    ['loading', 'error-banner', 'services', 'selected-service-info', 'selected-slot-info', 'review-summary', 'booking-form', 'name', 'email', 'phone', 'quantity', 'hp', 'place-booking', 'back-to-services', 'back-to-slots', 'calendar-container'].forEach((id) => {
     const el = id === 'booking-form' ? document.createElement('form') : id === 'name' || id === 'email' || id === 'phone' || id === 'quantity' || id === 'hp' ? document.createElement('input') : document.createElement('div');
     el.id = id; document.body.appendChild(el);
   });
@@ -52,6 +55,13 @@ describe('public booking payload and stale availability', () => {
     const heading = document.querySelector('#confirmation-content h2');
     expect(heading.id).toBe('confirmation-heading');
     expect(section.getAttribute('aria-labelledby')).toBe(heading.id);
+  });
+
+  test('production confirmation content container is inside the labeled step', () => {
+    const html = fs.readFileSync(path.join(__dirname, '../../index.html'), 'utf8');
+    const template = document.createElement('template'); template.innerHTML = html;
+    const section = template.content.querySelector('#step-5');
+    expect(section.querySelector('#confirmation-content')).not.toBeNull();
   });
 
   test.each(['SLOT_UNAVAILABLE', 'INSUFFICIENT_CAPACITY'])('%s returns to slot selection and refreshes fresh availability', async (code) => {
